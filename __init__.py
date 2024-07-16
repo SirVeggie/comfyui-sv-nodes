@@ -257,6 +257,48 @@ class StringSeparator:
 
 #-------------------------------------------------------------------------------#
 
+class StringCombine:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "part1": (any_type,),
+                "part2": (any_type,),
+                "separator": ("STRING", {"default": "\\n"})
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, part1, part2, separator="\\n"):
+        if not isinstance(part1, str) or not isinstance(part2, str):
+            raise TypeError("Invalid part input type")
+        if not isinstance(separator, str):
+            raise TypeError("Invalid separator input type")
+        separator = separator.replace("\\n", "\n").replace("\\t", "\t")
+        return (part1 + separator + part2,)
+
+#-------------------------------------------------------------------------------#
+
+
+
+
+
+
+
+
+
+
+# Flow Nodes
+#-------------------------------------------------------------------------------#
+
 class PromptPlusModel:
     def __init__(self):
         pass
@@ -646,6 +688,7 @@ NODE_CLASS_MAPPINGS = {
     "SV-BasicParams": BasicParams,
     "SV-BasicParamsOutput": BasicParamsOutput,
     "SV-StringSeparator": StringSeparator,
+    "SV-StringCombine": StringCombine,
     "SV-PromptPlusModel": PromptPlusModel,
     "SV-PromptPlusModelOutput": PromptPlusModelOutput,
     "SV-CacheShield": CacheShield,
@@ -669,6 +712,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-BasicParams": "Params",
     "SV-BasicParamsOutput": "Params Output",
     "SV-StringSeparator": "String Separator",
+    "SV-StringCombine": "String Combine",
     "SV-PromptPlusModel": "Prompt + Model",
     "SV-PromptPlusModelOutput": "P+M Output",
     "SV-CacheShield": "Cache Shield",
