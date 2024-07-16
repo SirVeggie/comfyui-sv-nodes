@@ -316,9 +316,10 @@ class LoadTextFile:
         if not isinstance(path, str):
             raise TypeError("Invalid path input type")
         try:
-            with open(path, "r") as file:
+            with open(path, "r", encoding="utf-8") as file:
                 return (file.read(), True)
-        except:
+        except Exception as e:
+            print(e)
             return ("", False)
 
 #-------------------------------------------------------------------------------#
