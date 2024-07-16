@@ -1,3 +1,4 @@
+import os
 import comfy.samplers
 import folder_paths
 import hashlib
@@ -286,6 +287,80 @@ class StringCombine:
         return (part1 + separator + part2,)
 
 #-------------------------------------------------------------------------------#
+
+class LoadTextFile:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "path": ("STRING", {"default": "", "multiline": False})
+            }
+        }
+    
+    @classmethod
+    def IS_CHANGED(s, path):
+        if os.path.exists(path):
+            return float("NaN")
+        return ""
+    
+    RETURN_TYPES = ("STRING", "BOOLEAN")
+    RETURN_NAMES = ("content", "success")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, path):
+        if not isinstance(path, str):
+            raise TypeError("Invalid path input type")
+        try:
+            with open(path, "r") as file:
+                return (file.read(), True)
+        except:
+            return ("", False)
+
+#-------------------------------------------------------------------------------#
+
+class SaveTextFile:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "path": ("STRING", {"default": "", "multiline": False}),
+                "content": (any_type,)
+            }
+        }
+    
+    @classmethod
+    def IS_CHANGED(s, path, content):
+        
+        m = hashlib.sha256()
+        m.update(content.encode())
+        return m.hexdigest()
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("success",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, path, content):
+        if not isinstance(path, str):
+            raise TypeError("Invalid path input type")
+        if not isinstance(content, (str, int, float, bool)):
+            raise TypeError("Invalid content input type")
+        try:
+            with open(path, "w") as file:
+                file.write(str(content))
+            return (True,)
+        except:
+            return (False,)
 
 
 
@@ -689,6 +764,8 @@ NODE_CLASS_MAPPINGS = {
     "SV-BasicParamsOutput": BasicParamsOutput,
     "SV-StringSeparator": StringSeparator,
     "SV-StringCombine": StringCombine,
+    "SV-LoadTextFile": LoadTextFile,
+    "SV-SaveTextFile": SaveTextFile,
     "SV-PromptPlusModel": PromptPlusModel,
     "SV-PromptPlusModelOutput": PromptPlusModelOutput,
     "SV-CacheShield": CacheShield,
@@ -713,6 +790,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-BasicParamsOutput": "Params Output",
     "SV-StringSeparator": "String Separator",
     "SV-StringCombine": "String Combine",
+    "SV-LoadTextFile": "Load Text File",
+    "SV-SaveTextFile": "Save Text File",
     "SV-PromptPlusModel": "Prompt + Model",
     "SV-PromptPlusModelOutput": "P+M Output",
     "SV-CacheShield": "Cache Shield",
