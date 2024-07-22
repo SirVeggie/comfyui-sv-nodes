@@ -1126,6 +1126,10 @@ def parse_vars(variables: str):
         line = line.strip()
         if len(line) == 0:
             continue
+        if line[0] == "#":
+            continue
+        if line.startswith("//"):
+            continue
         
         parts = line.split("=", 1)
         if len(parts) != 2:
