@@ -6,12 +6,38 @@ import math
 import random as _random
 import json
 import re
+import torch
 
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
 
 any_type = AnyType("*")
+
+#-------------------------------------------------------------------------------#
+
+class SimpleText:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True})
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, text):
+        if not isinstance(text, str):
+            raise TypeError("Invalid text input type")
+        return (text,)
 
 #-------------------------------------------------------------------------------#
 
@@ -23,11 +49,11 @@ class PromptProcessing:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "text": (any_type, {"multiline": False})
+                "text": ("STRING", {"multiline": True, "forceInput": True})
             },
             "optional": {
-                "variables": (any_type, {"multiline": True, "default": ""}),
-                "seed": (any_type, {"default": 1})
+                "variables": ("STRING", {"multiline": True, "forceInput": True, "default": ""}),
+                "seed": ("INT", {"forceInput": True, "default": 1})
             }
         }
     
@@ -45,7 +71,7 @@ class PromptProcessing:
         return process(text, 0, variables, seed), process(text, 1, variables, seed), process(text, 2, variables, seed)
     
     @classmethod
-    def IS_CHANGED(s, text, variables, seed):
+    def IS_CACHED(s, text, variables, seed):
         return f"{text} {variables} {seed}"
 
 #-------------------------------------------------------------------------------#
@@ -62,10 +88,10 @@ class ResolutionSelector:
             "required": {
                 "base": ("INT", {"default": 768, "min": 64, "max": 4096, "step": 64}),
                 "ratio": (ResolutionSelector.RATIOS,),
-                "orientation": ("BOOLEAN", {"default": False, "label_on": "landscape", "label_off": "portrait"})
+                "orientation": ("BOOLEAN", {"default": False, "label_on": "portrait", "label_off": "landscape"})
             },
             "optional": {
-                "seed": ("*", {"default": 1}),
+                "seed": ("*", {"default": -1}),
                 "random": ("*", {"default": ""}),
             }
         }
@@ -76,7 +102,7 @@ class ResolutionSelector:
     FUNCTION = "run"
     CATEGORY = "SV Nodes"
     
-    def run(self, base, ratio, orientation, seed=1, random=""):
+    def run(self, base, ratio, orientation, seed=-1, random=""):
         if not isinstance(seed, int):
             raise TypeError("Invalid seed input type")
         if not isinstance(random, str) and not None:
@@ -89,7 +115,7 @@ class ResolutionSelector:
         if random == "orientation":
             rand = _random.Random(seed)
             orientation = rand.choice([True, False])
-        elif random:
+        elif random and seed and seed >= 1:
             random = random.replace(" ", "").split(",")
             rand = _random.Random(seed)
             ratio = rand.choice(random).split(":")
@@ -98,15 +124,13 @@ class ResolutionSelector:
         width = math.floor(base * ratio / 64) * 64 
         height = math.floor(base / ratio / 64) * 64
         
-        if not orientation:
+        if orientation:
             width, height = height, width
         return width, height
 
 #-------------------------------------------------------------------------------#
 
 class ResolutionSelector2:
-    RATIOS = ["1:1", "5:4", "4:3", "3:2", "16:9", "21:9"]
-    
     def __init__(self):
         pass
     
@@ -115,13 +139,13 @@ class ResolutionSelector2:
         return {
             "required": {
                 "base": ("INT", {"default": 768, "min": 64, "max": 4096, "step": 64}),
-                "ratio": (ResolutionSelector2.RATIOS,),
-                "orientation": ("BOOLEAN", {"default": False, "label_on": "landscape", "label_off": "portrait"}),
+                "ratio": (ResolutionSelector.RATIOS,),
+                "orientation": ("BOOLEAN", {"default": False, "label_on": "portrait", "label_off": "landscape"}),
                 "hires": ("FLOAT", {"min": 1, "max": 4, "step": 0.1, "default": 1.5}),
                 "batch": ("INT", {"min": 1, "max": 32, "step": 1, "default": 1})
             },
             "optional": {
-                "seed": ("*", {"default": 1}),
+                "seed": ("*", {"default": -1}),
                 "random": ("*", {"default": ""}),
             }
         }
@@ -132,7 +156,7 @@ class ResolutionSelector2:
     FUNCTION = "run"
     CATEGORY = "SV Nodes"
     
-    def run(self, base, ratio, orientation, hires, batch, seed=1, random=""):
+    def run(self, base, ratio, orientation, hires, batch, seed=-1, random=""):
         result = ResolutionSelector.run(self, base, ratio, orientation, seed, random)
         return ((result[0], result[1], hires, batch),)
         
@@ -176,7 +200,7 @@ class BasicParams:
                 "cfg": ("FLOAT", {"min": 0, "max": 20, "step": 0.1, "default": 8.0}),
                 "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
                 "denoise": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 1.0}),
-                "sampler": (comfy.samplers.SAMPLER_NAMES, )
+                "sampler": (comfy.samplers.SAMPLER_NAMES,)
             }
         }
     
@@ -195,7 +219,42 @@ class BasicParams:
             raise TypeError("Invalid denoise input type")
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
-        return ((cfg, steps, denoise, sampler),)
+        return ((cfg, steps, denoise, sampler, "normal"),)
+
+#-------------------------------------------------------------------------------#
+
+class BasicParamsPlus:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "cfg": ("FLOAT", {"min": 0, "max": 20, "step": 0.1, "default": 8.0}),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
+                "denoise": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 1.0}),
+                "sampler": (comfy.samplers.SAMPLER_NAMES,),
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES,)
+            }
+        }
+    
+    RETURN_TYPES = ("BP_OUTPUT",)
+    RETURN_NAMES = ("packet",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, cfg, steps, denoise, sampler, scheduler):
+        if not isinstance(cfg, float) and not isinstance(cfg, int):
+            raise TypeError("Invalid cfg input type")
+        if not isinstance(steps, int):
+            raise TypeError("Invalid steps input type")
+        if not isinstance(denoise, float) and not isinstance(denoise, int):
+            raise TypeError("Invalid denoise input type")
+        if not isinstance(sampler, str):
+            raise TypeError("Invalid sampler input type")
+        return ((cfg, steps, denoise, sampler, scheduler),)
 
 #-------------------------------------------------------------------------------#
 
@@ -211,8 +270,8 @@ class BasicParamsOutput:
             }
         }
     
-    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", "SAMPLER")
-    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler")
+    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES)
+    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler")
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes"
@@ -220,11 +279,36 @@ class BasicParamsOutput:
     def run(self, packet):
         if not isinstance(packet, tuple):
             raise TypeError("Invalid packet input type")
-        if len(packet) != 4:
+        if len(packet) != 5:
             raise ValueError("Invalid packet length")
-        sampler = comfy.samplers.sampler_object(packet[3])
-        return packet[0], packet[1], packet[2], sampler
+        return packet[0], packet[1], packet[2], packet[3], packet[4]
+
+#-------------------------------------------------------------------------------#
+
+class SamplerNameToSampler:
+    def __init__(self):
+        pass
     
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "name": (comfy.samplers.SAMPLER_NAMES, {"forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("SAMPLER",)
+    RETURN_NAMES = ("sampler",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, name):
+        if not isinstance(name, str):
+            raise TypeError("Invalid name input type")
+        if name not in comfy.samplers.SAMPLER_NAMES:
+            raise ValueError("Invalid name")
+        return (comfy.samplers.sampler_object(name),)
 
 #-------------------------------------------------------------------------------#
 
@@ -236,7 +320,7 @@ class StringSeparator:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "text": (any_type,),
+                "text": ("STRING", {"forceInput": True}),
                 "separator": ("STRING", {"default": "\\n---\\n"})
             }
         }
@@ -266,8 +350,8 @@ class StringCombine:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "part1": (any_type,),
-                "part2": (any_type,),
+                "part1": ("STRING", {"forceInput": True}),
+                "part2": ("STRING", {"forceInput": True}),
                 "separator": ("STRING", {"default": "\\n"})
             }
         }
@@ -303,7 +387,7 @@ class LoadTextFile:
     @classmethod
     def IS_CHANGED(s, path):
         if os.path.exists(path):
-            return float("NaN")
+            return os.path.getmtime(path)
         return ""
     
     RETURN_TYPES = ("STRING", "BOOLEAN")
@@ -333,16 +417,13 @@ class SaveTextFile:
         return {
             "required": {
                 "path": ("STRING", {"default": "", "multiline": False}),
-                "content": (any_type,)
+                "content": ("STRING", {"forceInput": True})
             }
         }
     
     @classmethod
-    def IS_CHANGED(s, path, content):
-        
-        m = hashlib.sha256()
-        m.update(content.encode())
-        return m.hexdigest()
+    def IS_CACHED(s, path, content):
+        return path + " " + content
     
     OUTPUT_NODE = True
     RETURN_TYPES = ("BOOLEAN",)
@@ -363,10 +444,141 @@ class SaveTextFile:
         except:
             return (False,)
 
+#-------------------------------------------------------------------------------#
 
+class BooleanNot:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "value": ("BOOLEAN", {"forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("value",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, value):
+        return (not value,)
 
+#-------------------------------------------------------------------------------#
 
+class SigmaOneStep:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, sigmas):
+        lastSigma = sigmas[-1].item()
+        return (torch.FloatTensor([lastSigma, 0]).cpu(),)
 
+#-------------------------------------------------------------------------------#
+
+class SigmaRange:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",),
+                "start": ("INT", {"default": 0, "min": 0, "max": 100}),
+                "end": ("INT", {"default": 0, "min": 0, "max": 100}),
+            }
+        }
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+
+    def run(self, sigmas, start, end):
+        return (sigmas[start:end + 1],)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaContinue:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "source": ("SIGMAS",),
+                "imitate": ("SIGMAS",),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, source, imitate, steps):
+        lastSigma = source[-1].item()
+        if lastSigma < 0.0001:
+            raise ValueError("Invalid source sigma")
+        imitateRaw = imitate.tolist()
+        length = len(imitateRaw)
+        start = 0
+        while lastSigma < imitateRaw[start]:
+            start += 1
+        result = [lastSigma]
+        for i in range(1, steps + 1):
+            progress = i / steps
+            sigma_i = round((length - 1 - start) * progress + start)
+            result.append(imitateRaw[sigma_i])
+        return (torch.FloatTensor(result).cpu(),)
+
+#-------------------------------------------------------------------------------#
+
+class ModelName:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": (folder_paths.get_filename_list("checkpoints"),)
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("model name",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, model):
+        if not isinstance(model, str):
+            raise TypeError("Invalid model input type")
+        return (model,)
+
+#-------------------------------------------------------------------------------#
 
 
 
@@ -452,9 +664,14 @@ class CacheShield:
         return (any,)
     
     @classmethod
-    def IS_CHANGED(s, any):
+    def IS_CACHED(s, any):
         try:
-            if isinstance(any, (str, int, float, bool, type(None))):
+            if isinstance(any, (tuple, list)):
+                is_changed = False
+                for item in any:
+                    is_changed = is_changed or CacheShield.IS_CHANGED(s, item)
+                return is_changed
+            elif isinstance(any, (str, int, float, bool, type(None))):
                 return any
             elif isinstance(any, (list, tuple, dict)):
                 return hashlib.md5(json.dumbs(any, sort_keys=True).encode()).hexdigest()
@@ -757,16 +974,24 @@ class AnyToAny:
 #-------------------------------------------------------------------------------#
 
 NODE_CLASS_MAPPINGS = {
+    "SV-SimpleText": SimpleText,
     "SV-PromptProcessing": PromptProcessing,
     "SV-ResolutionSelector": ResolutionSelector,
     "SV-ResolutionSelector2": ResolutionSelector2,
     "SV-ResolutionSelector2Output": ResolutionSelector2Output,
     "SV-BasicParams": BasicParams,
+    "SV-BasicParamsPlus": BasicParamsPlus,
     "SV-BasicParamsOutput": BasicParamsOutput,
+    "SV-SamplerNameToSampler": SamplerNameToSampler,
     "SV-StringSeparator": StringSeparator,
     "SV-StringCombine": StringCombine,
     "SV-LoadTextFile": LoadTextFile,
     "SV-SaveTextFile": SaveTextFile,
+    "SV-BooleanNot": BooleanNot,
+    "SV-SigmaOneStep": SigmaOneStep,
+    "SV-SigmaRange": SigmaRange,
+    "SV-SigmaContinue": SigmaContinue,
+    "SV-ModelName": ModelName,
     "SV-PromptPlusModel": PromptPlusModel,
     "SV-PromptPlusModelOutput": PromptPlusModelOutput,
     "SV-CacheShield": CacheShield,
@@ -783,16 +1008,24 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "SV-SimpleText": "Simple Text",
     "SV-PromptProcessing": "Prompt Processing",
     "SV-ResolutionSelector": "Resolution Selector",
     "SV-ResolutionSelector2": "Resolution Selector 2",
     "SV-ResolutionSelector2Output": "Selector Output",
     "SV-BasicParams": "Params",
+    "SV-BasicParamsPlus": "Params Plus",
     "SV-BasicParamsOutput": "Params Output",
+    "SV-SamplerNameToSampler": "Sampler Converter",
     "SV-StringSeparator": "String Separator",
     "SV-StringCombine": "String Combine",
     "SV-LoadTextFile": "Load Text File",
     "SV-SaveTextFile": "Save Text File",
+    "SV-BooleanNot": "Boolean Not",
+    "SV-SigmaOneStep": "Sigmas One Step",
+    "SV-SigmaRange": "Sigma Range",
+    "SV-SigmaContinue": "Sigma Continue",
+    "SV-ModelName": "Model Name",
     "SV-PromptPlusModel": "Prompt + Model",
     "SV-PromptPlusModelOutput": "P+M Output",
     "SV-CacheShield": "Cache Shield",
