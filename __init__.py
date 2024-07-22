@@ -372,6 +372,71 @@ class StringCombine:
 
 #-------------------------------------------------------------------------------#
 
+class InputSelect:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "select": ("INT", {"min": 1, "max": 5, "step": 1}),
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "_3_": (any_type,),
+                "_4_": (any_type,),
+                "_5_": (any_type,),
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("out",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, select, _1_, _2_, _3_, _4_, _5_):
+        if select == 1:
+            return (_1_,)
+        if select == 2:
+            return (_2_,)
+        if select == 3:
+            return (_3_,)
+        if select == 4:
+            return (_4_,)
+        if select == 5:
+            return (_5_,)
+        return (None,)
+
+#-------------------------------------------------------------------------------#
+
+class InputSelectBoolean:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "select": ("BOOLEAN",),
+                "on": (any_type,),
+                "off": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("out",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes"
+    
+    def run(self, select, on, off):
+        if select:
+            return (on,)
+        return (off,)
+
+#-------------------------------------------------------------------------------#
+
 class LoadTextFile:
     def __init__(self):
         pass
@@ -985,6 +1050,8 @@ NODE_CLASS_MAPPINGS = {
     "SV-SamplerNameToSampler": SamplerNameToSampler,
     "SV-StringSeparator": StringSeparator,
     "SV-StringCombine": StringCombine,
+    "SV-InputSelect": InputSelect,
+    "SV-InputSelectBoolean": InputSelectBoolean,
     "SV-LoadTextFile": LoadTextFile,
     "SV-SaveTextFile": SaveTextFile,
     "SV-BooleanNot": BooleanNot,
@@ -1019,6 +1086,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-SamplerNameToSampler": "Sampler Converter",
     "SV-StringSeparator": "String Separator",
     "SV-StringCombine": "String Combine",
+    "SV-InputSelect": "Input Select",
+    "SV-InputSelectBoolean": "Boolean Select",
     "SV-LoadTextFile": "Load Text File",
     "SV-SaveTextFile": "Save Text File",
     "SV-BooleanNot": "Boolean Not",
