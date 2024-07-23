@@ -32,7 +32,7 @@ class SimpleText:
     RETURN_NAMES = ("text",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, text):
         if not isinstance(text, str):
@@ -61,7 +61,7 @@ class PromptProcessing:
     RETURN_NAMES = ("1st pass", "2nd pass", "3rd pass")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Processing"
     
     def run(self, text, variables="", seed=1):
         if not isinstance(text, str) or not isinstance(variables, str):
@@ -100,7 +100,7 @@ class ResolutionSelector:
     RETURN_NAMES = ("width", "height")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, base, ratio, orientation, seed=-1, random=""):
         if not isinstance(seed, int):
@@ -154,7 +154,7 @@ class ResolutionSelector2:
     RETURN_NAMES = ("packet",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, base, ratio, orientation, hires, batch, seed=-1, random=""):
         result = ResolutionSelector.run(self, base, ratio, orientation, seed, random)
@@ -178,7 +178,7 @@ class ResolutionSelector2Output:
     RETURN_NAMES = ("width", "height", "hires ratio", "batch size")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, packet):
         if not isinstance(packet, tuple):
@@ -208,7 +208,7 @@ class BasicParams:
     RETURN_NAMES = ("packet",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, cfg, steps, denoise, sampler):
         if not isinstance(cfg, float) and not isinstance(cfg, int):
@@ -243,7 +243,7 @@ class BasicParamsPlus:
     RETURN_NAMES = ("packet",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, cfg, steps, denoise, sampler, scheduler):
         if not isinstance(cfg, float) and not isinstance(cfg, int):
@@ -274,7 +274,7 @@ class BasicParamsOutput:
     RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, packet):
         if not isinstance(packet, tuple):
@@ -301,7 +301,7 @@ class SamplerNameToSampler:
     RETURN_NAMES = ("sampler",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, name):
         if not isinstance(name, str):
@@ -329,7 +329,7 @@ class StringSeparator:
     RETURN_NAMES = ("part1", "part2")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Processing"
     
     def run(self, text, separator="\\n---\\n"):
         if not isinstance(text, str):
@@ -360,7 +360,7 @@ class StringCombine:
     RETURN_NAMES = ("text",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Processing"
     
     def run(self, part1, part2, separator="\\n"):
         if not isinstance(part1, str) or not isinstance(part2, str):
@@ -393,7 +393,7 @@ class InputSelect:
     RETURN_NAMES = ("out",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, select, _1_, _2_, _3_, _4_, _5_):
         if select == 1:
@@ -428,7 +428,7 @@ class InputSelectBoolean:
     RETURN_NAMES = ("out",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, select, on, off):
         if select:
@@ -459,7 +459,7 @@ class LoadTextFile:
     RETURN_NAMES = ("content", "success")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/IO"
     
     def run(self, path):
         if not isinstance(path, str):
@@ -495,7 +495,7 @@ class SaveTextFile:
     RETURN_NAMES = ("success",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/IO"
     
     def run(self, path, content):
         if not isinstance(path, str):
@@ -527,7 +527,7 @@ class BooleanNot:
     RETURN_NAMES = ("value",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Logic"
     
     def run(self, value):
         return (not value,)
@@ -550,7 +550,7 @@ class SigmaOneStep:
     RETURN_NAMES = ("sigmas",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Sigmas"
     
     def run(self, sigmas):
         lastSigma = sigmas[-1].item()
@@ -575,7 +575,7 @@ class SigmaRange:
     RETURN_NAMES = ("sigmas",)
 
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Sigmas"
 
     def run(self, sigmas, start, end):
         return (sigmas[start:end + 1],)
@@ -600,7 +600,7 @@ class SigmaContinue:
     RETURN_NAMES = ("sigmas",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Sigmas"
     
     def run(self, source, imitate, steps):
         lastSigma = source[-1].item()
@@ -636,7 +636,7 @@ class ModelName:
     RETURN_NAMES = ("model name",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, model):
         if not isinstance(model, str):
@@ -669,7 +669,7 @@ class PromptPlusModel:
     RETURN_NAMES = ("packet",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, model, prompt):
         if not isinstance(model, str):
@@ -696,7 +696,7 @@ class PromptPlusModelOutput:
     RETURN_NAMES = ("model name", "prompt")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Input"
     
     def run(self, packet):
         if not isinstance(packet, tuple):
@@ -723,7 +723,7 @@ class CacheShield:
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, any):
         return (any,)
@@ -767,7 +767,7 @@ class FlowManualCache:
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, any, enabled):
         return (any,)
@@ -796,7 +796,7 @@ class FlowBlockSignal:
     RETURN_NAMES = ("signal",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, enabled):
         return (None,)
@@ -826,7 +826,7 @@ class FlowBlock:
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, signal, any):
         return (any,)
@@ -850,7 +850,7 @@ class FlowBlockSimple:
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, any, enabled):
         return (any,)
@@ -886,7 +886,7 @@ class FlowSelect:
     RETURN_NAMES = ("out",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, select, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
         raise NotImplementedError("This node is not working yet")
@@ -928,7 +928,7 @@ class FlowContinue:
     RETURN_NAMES = ("any", "index")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
         for i, any in enumerate((_1_, _2_, _3_, _4_, _5_)):
@@ -956,7 +956,7 @@ class FlowContinueSimple:
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, any):
         return (any,)
@@ -985,10 +985,390 @@ class FlowNode:
     RETURN_NAMES = ("_1_", "_2_", "_3_", "_4_", "_5_")
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
         return (_1_, _2_, _3_, _4_, _5_)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInput:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "start": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            },
+            "optional": {
+                "pipe": ("sv_pipe",),
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "_3_": (any_type,),
+                "_4_": (any_type,),
+                "_5_": (any_type,),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, start, pipe=None, **kwargs):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(start, int):
+            raise TypeError("Invalid start input type")
+        if start < 1:
+            raise ValueError("Invalid start value")
+        pipe = {**pipe} if pipe else {}
+        pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
+        pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
+        pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
+        pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
+        pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
+        return (pipe,)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputLarge:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "start": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            },
+            "optional": {
+                "pipe": ("sv_pipe",),
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "_3_": (any_type,),
+                "_4_": (any_type,),
+                "_5_": (any_type,),
+                "_6_": (any_type,),
+                "_7_": (any_type,),
+                "_8_": (any_type,),
+                "_9_": (any_type,),
+                "_10_": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, start, pipe=None, **kwargs):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(start, int):
+            raise TypeError("Invalid start input type")
+        if start < 1:
+            raise ValueError("Invalid start value")
+        pipe = {**pipe} if pipe else {}
+        pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
+        pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
+        pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
+        pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
+        pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
+        pipe[f"_{5 + start}_"] = kwargs.get("_6_", None)
+        pipe[f"_{6 + start}_"] = kwargs.get("_7_", None)
+        pipe[f"_{7 + start}_"] = kwargs.get("_8_", None)
+        pipe[f"_{8 + start}_"] = kwargs.get("_9_", None)
+        pipe[f"_{9 + start}_"] = kwargs.get("_10_", None)
+        return (pipe,)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputIndex:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            },
+            "optional": {
+                "pipe": ("sv_pipe",),
+                "value": (any_type,),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, index, pipe=None, value=None):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        pipe = {**pipe} if pipe else {}
+        pipe[f"_{index}_"] = value
+        return (pipe,)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputKey:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "key": ("STRING", {"multiline": False}),
+            },
+            "optional": {
+                "pipe": ("sv_pipe",),
+                "value": (any_type,),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, key, pipe=None, value=None):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(key, str):
+            raise TypeError("Invalid key input type")
+        pipe = {**pipe} if pipe else {}
+        pipe[key] = value
+        return (pipe,)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputKeyTuple:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "key": ("STRING", {"multiline": False}),
+            },
+            "optional": {
+                "pipe": ("sv_pipe",),
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "_3_": (any_type,),
+                "_4_": (any_type,),
+                "_5_": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, key, pipe=None, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(key, str):
+            raise TypeError("Invalid key input type")
+        pipe = {**pipe} if pipe else {}
+        pipe[key] = (_1_, _2_, _3_, _4_, _5_)
+        return (pipe,)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeCombine:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe1": ("sv_pipe",),
+                "pipe2": ("sv_pipe",),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe1, pipe2):
+        if not isinstance(pipe1, (dict, type(None))) or not isinstance(pipe2, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if pipe1 is None:
+            pipe1 = {}
+        if pipe2 is None:
+            pipe2 = {}
+        return ({**pipe1, **pipe2},)
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutput:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None))
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputLarge:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_", "_6_", "_7_", "_8_", "_9_", "_10_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None), pipe.get(f"_{5 + index}_", None), pipe.get(f"_{6 + index}_", None), pipe.get(f"_{7 + index}_", None), pipe.get(f"_{8 + index}_", None), pipe.get(f"_{9 + index}_", None))
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputIndex:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_NAMES = ("pipe", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{index}_", None))
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputKey:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_NAMES = ("pipe", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(key, str):
+            raise TypeError("Invalid key input type")
+        return (pipe, pipe.get(key, None))
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputKeyTuple:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(key, str):
+            raise TypeError("Invalid key input type")
+        value = pipe.get(key, None)
+        if not isinstance(value, (tuple, list)):
+            raise ValueError("Invalid value type")
+        return (pipe, *value)
 
 #-------------------------------------------------------------------------------#
 
@@ -1008,7 +1388,7 @@ class CheckNone:
     RETURN_NAMES = ("bool",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes"
+    CATEGORY = "SV Nodes/Logic"
     
     def run(self, any):
         return (any is None,)
@@ -1071,7 +1451,18 @@ NODE_CLASS_MAPPINGS = {
     "SV-FlowContinueSimple": FlowContinueSimple,
     "SV-FlowNode": FlowNode,
     "SV-CheckNone": CheckNone,
-    "SV-AnyToAny": AnyToAny
+    "SV-AnyToAny": AnyToAny,
+    "SV-FlowPipeInput": FlowPipeInput,
+    "SV-FlowPipeInputLarge": FlowPipeInputLarge,
+    "SV-FlowPipeInputIndex": FlowPipeInputIndex,
+    "SV-FlowPipeInputKey": FlowPipeInputKey,
+    "SV-FlowPipeInputKeyTuple": FlowPipeInputKeyTuple,
+    "SV-FlowPipeCombine": FlowPipeCombine,
+    "SV-FlowPipeOutput": FlowPipeOutput,
+    "SV-FlowPipeOutputLarge": FlowPipeOutputLarge,
+    "SV-FlowPipeOutputIndex": FlowPipeOutputIndex,
+    "SV-FlowPipeOutputKey": FlowPipeOutputKey,
+    "SV-FlowPipeOutputKeyTuple": FlowPipeOutputKeyTuple
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1107,7 +1498,18 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-FlowContinueSimple": "Simple Continue",
     "SV-FlowNode": "Flow Node",
     "SV-CheckNone": "Check None",
-    "SV-AnyToAny": "Any to Any"
+    "SV-AnyToAny": "Any to Any",
+    "SV-FlowPipeInput": "Pipe In",
+    "SV-FlowPipeInputLarge": "Pipe In Large",
+    "SV-FlowPipeInputIndex": "Pipe In Index",
+    "SV-FlowPipeInputKey": "Pipe In Key",
+    "SV-FlowPipeInputKeyTuple": "Pipe In Tuple",
+    "SV-FlowPipeCombine": "Pipe Combine",
+    "SV-FlowPipeOutput": "Pipe Out",
+    "SV-FlowPipeOutputLarge": "Pipe Out Large",
+    "SV-FlowPipeOutputIndex": "Pipe Out Index",
+    "SV-FlowPipeOutputKey": "Pipe Out Key",
+    "SV-FlowPipeOutputKeyTuple": "Pipe Out Tuple"
 }
 
 #-------------------------------------------------------------------------------#
@@ -1116,6 +1518,21 @@ processing_depth = 5
 var_char = "$"
 char_open = "{"
 char_close = "}"
+
+#-------------------------------------------------------------------------------#
+
+def parse_index(input: str):
+    # parse index from input, eg. _1_
+    if input.startswith("_") and input.endswith("_"):
+        try:
+            return int(input[1:-1])
+        except:
+            raise ValueError(f"Invalid index input: {input}")
+
+def input_add(input: str, value: int):
+    # add value to input index, eg. _1_ + 1 = _2_
+    index = parse_index(input)
+    return f"_{index + value}_"
 
 #-------------------------------------------------------------------------------#
 
