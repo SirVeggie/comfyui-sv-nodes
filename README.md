@@ -16,7 +16,7 @@ Example: Your flow can take a completely different branch depending on what obje
 
 ### Documentation
 
-Due to the experimental nature of flow control, it may not remain up to date very reliably, and as such I don't expect many people to be interested in this repo. However if you still somehow found your way here and want to test/use flow control, I encourage you to open an issue, and I will cook up some docs/examples for you.
+See the [wiki](https://github.com/SirVeggie/comfyui-sv-nodes/wiki).
 
 ## Node list
 
