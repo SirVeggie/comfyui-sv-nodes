@@ -29,6 +29,8 @@ See the [wiki](https://github.com/SirVeggie/comfyui-sv-nodes/wiki).
 - String Separator: split text into two parts (useful for positive and negative prompt)
 - Check None: true if input was None, useful for flow control
 - Any to Any
+- My version of `Pipes`
+- etc.
 
 ### Flow nodes
 
