@@ -653,6 +653,54 @@ class SigmaContinue:
 
 #-------------------------------------------------------------------------------#
 
+class SigmaAsFloat:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("float",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas):
+        if len(sigmas) < 1:
+            raise ValueError("Invalid sigmas length")
+        return (sigmas[0].item(),)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaLength:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("length",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas):
+        return (len(sigmas),)
+
+#-------------------------------------------------------------------------------#
+
 class ModelName:
     def __init__(self):
         pass
@@ -1558,7 +1606,7 @@ class ConsolePrint:
     CATEGORY = "SV Nodes/Output"
     
     def run(self, text, signal=None):
-        print(text)
+        print(text.replace("_signal_", str(signal)))
         return {}
 
 #-------------------------------------------------------------------------------#
@@ -1634,6 +1682,8 @@ NODE_CLASS_MAPPINGS = {
     "SV-SigmaOneStep": SigmaOneStep,
     "SV-SigmaRange": SigmaRange,
     "SV-SigmaContinue": SigmaContinue,
+    "SV-SigmaAsFloat": SigmaAsFloat,
+    "SV-SigmaLength": SigmaLength,
     "SV-ModelName": ModelName,
     "SV-PromptPlusModel": PromptPlusModel,
     "SV-PromptPlusModelOutput": PromptPlusModelOutput,
@@ -1686,6 +1736,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-SigmaOneStep": "Sigmas One Step",
     "SV-SigmaRange": "Sigma Range",
     "SV-SigmaContinue": "Sigma Continue",
+    "SV-SigmaAsFloat": "Sigma As Float",
+    "SV-SigmaLength": "Sigma Length",
     "SV-ModelName": "Model Name",
     "SV-PromptPlusModel": "Prompt + Model",
     "SV-PromptPlusModelOutput": "P+M Output",
