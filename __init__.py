@@ -342,6 +342,33 @@ class StringSeparator:
 
 #-------------------------------------------------------------------------------#
 
+class LoraSeparator:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt", "lora")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, text):
+        if not isinstance(text, str):
+            raise TypeError("Invalid text input type")
+        prompt = re.sub(r"<l\w+:[^>]+>", "", text, 0, re.IGNORECASE)
+        lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
+        return (prompt, lora)
+
+#-------------------------------------------------------------------------------#
+
 class StringCombine:
     def __init__(self):
         pass
@@ -381,6 +408,8 @@ class InputSelect:
         return {
             "required": {
                 "select": ("INT", {"min": 1, "max": 5, "step": 1}),
+            },
+            "optional": {
                 "_1_": (any_type,),
                 "_2_": (any_type,),
                 "_3_": (any_type,),
@@ -395,7 +424,7 @@ class InputSelect:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Flow"
     
-    def run(self, select, _1_, _2_, _3_, _4_, _5_):
+    def run(self, select, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
         if select == 1:
             return (_1_,)
         if select == 2:
@@ -419,6 +448,8 @@ class InputSelectBoolean:
         return {
             "required": {
                 "select": ("BOOLEAN",),
+            },
+            "optional": {
                 "on": (any_type,),
                 "off": (any_type,)
             }
@@ -430,7 +461,7 @@ class InputSelectBoolean:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Flow"
     
-    def run(self, select, on, off):
+    def run(self, select, on=None, off=None):
         if select:
             return (on,)
         return (off,)
@@ -603,6 +634,8 @@ class SigmaContinue:
     CATEGORY = "SV Nodes/Sigmas"
     
     def run(self, source, imitate, steps):
+        if steps < 1:
+            return (torch.FloatTensor([]).cpu(),)
         lastSigma = source[-1].item()
         if lastSigma < 0.0001:
             raise ValueError("Invalid source sigma")
@@ -747,6 +780,40 @@ class CacheShield:
                     return hashlib.md5(repr(any).encode()).hexdigest()
         except:
             return ""
+
+#-------------------------------------------------------------------------------#
+
+class CacheShieldProxy:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "check": (any_type,)
+            },
+            "optional": {
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "_3_": (any_type,),
+                "_4_": (any_type,),
+                "_5_": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = (any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("_1_", "_2_", "_3_", "_4_", "_5_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, check, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
+        return (_1_, _2_, _3_, _4_, _5_)
+    
+    @classmethod
+    def IS_CACHED(s, check, **kwargs):
+        return CacheShield.IS_CACHED(s, check)
 
 #-------------------------------------------------------------------------------#
 
@@ -1026,11 +1093,16 @@ class FlowPipeInput:
         if start < 1:
             raise ValueError("Invalid start value")
         pipe = {**pipe} if pipe else {}
-        pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
-        pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
-        pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
-        pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
-        pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
+        if kwargs.get("_1_", None) is not None:
+            pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
+        if kwargs.get("_2_", None) is not None:
+            pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
+        if kwargs.get("_3_", None) is not None:
+            pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
+        if kwargs.get("_4_", None) is not None:
+            pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
+        if kwargs.get("_5_", None) is not None:
+            pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
         return (pipe,)
 
 #-------------------------------------------------------------------------------#
@@ -1074,16 +1146,26 @@ class FlowPipeInputLarge:
         if start < 1:
             raise ValueError("Invalid start value")
         pipe = {**pipe} if pipe else {}
-        pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
-        pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
-        pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
-        pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
-        pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
-        pipe[f"_{5 + start}_"] = kwargs.get("_6_", None)
-        pipe[f"_{6 + start}_"] = kwargs.get("_7_", None)
-        pipe[f"_{7 + start}_"] = kwargs.get("_8_", None)
-        pipe[f"_{8 + start}_"] = kwargs.get("_9_", None)
-        pipe[f"_{9 + start}_"] = kwargs.get("_10_", None)
+        if kwargs.get("_1_", None) is not None:
+            pipe[f"_{0 + start}_"] = kwargs.get("_1_", None)
+        if kwargs.get("_2_", None) is not None:
+            pipe[f"_{1 + start}_"] = kwargs.get("_2_", None)
+        if kwargs.get("_3_", None) is not None:
+            pipe[f"_{2 + start}_"] = kwargs.get("_3_", None)
+        if kwargs.get("_4_", None) is not None:
+            pipe[f"_{3 + start}_"] = kwargs.get("_4_", None)
+        if kwargs.get("_5_", None) is not None:
+            pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
+        if kwargs.get("_6_", None) is not None:
+            pipe[f"_{5 + start}_"] = kwargs.get("_6_", None)
+        if kwargs.get("_7_", None) is not None:
+            pipe[f"_{6 + start}_"] = kwargs.get("_7_", None)
+        if kwargs.get("_8_", None) is not None:
+            pipe[f"_{7 + start}_"] = kwargs.get("_8_", None)
+        if kwargs.get("_9_", None) is not None:
+            pipe[f"_{8 + start}_"] = kwargs.get("_9_", None)
+        if kwargs.get("_10_", None) is not None:
+            pipe[f"_{9 + start}_"] = kwargs.get("_10_", None)
         return (pipe,)
 
 #-------------------------------------------------------------------------------#
@@ -1117,6 +1199,8 @@ class FlowPipeInputIndex:
             raise TypeError("Invalid index input type")
         if index < 1:
             raise ValueError("Invalid index value")
+        if value is None:
+            return (pipe,)
         pipe = {**pipe} if pipe else {}
         pipe[f"_{index}_"] = value
         return (pipe,)
@@ -1150,6 +1234,8 @@ class FlowPipeInputKey:
             raise TypeError("Invalid pipe input type")
         if not isinstance(key, str):
             raise TypeError("Invalid key input type")
+        if value is None:
+            return (pipe,)
         pipe = {**pipe} if pipe else {}
         pipe[key] = value
         return (pipe,)
@@ -1188,7 +1274,13 @@ class FlowPipeInputKeyTuple:
         if not isinstance(key, str):
             raise TypeError("Invalid key input type")
         pipe = {**pipe} if pipe else {}
-        pipe[key] = (_1_, _2_, _3_, _4_, _5_)
+        old = pipe.get(key, (None, None, None, None, None))
+        value1 = _1_ if _1_ is not None else old[0]
+        value2 = _2_ if _2_ is not None else old[1]
+        value3 = _3_ if _3_ is not None else old[2]
+        value4 = _4_ if _4_ is not None else old[3]
+        value5 = _5_ if _5_ is not None else old[4]
+        pipe[key] = (value1, value2, value3, value4, value5)
         return (pipe,)
 
 #-------------------------------------------------------------------------------#
@@ -1219,6 +1311,9 @@ class FlowPipeCombine:
             pipe1 = {}
         if pipe2 is None:
             pipe2 = {}
+        # remove None values
+        pipe1 = {k: v for k, v in pipe1.items() if v is not None}
+        pipe2 = {k: v for k, v in pipe2.items() if v is not None}
         return ({**pipe1, **pipe2},)
 
 #-------------------------------------------------------------------------------#
@@ -1395,6 +1490,29 @@ class CheckNone:
 
 #-------------------------------------------------------------------------------#
 
+class CheckNoneNot:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("bool",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any):
+        return (any is not None,)
+
+#-------------------------------------------------------------------------------#
+
 class AnyToAny:
     def __init__(self):
         pass
@@ -1418,6 +1536,83 @@ class AnyToAny:
 
 #-------------------------------------------------------------------------------#
 
+class ConsolePrint:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True})
+            },
+            "optional": {
+                "signal": (any_type,),
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ()
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Output"
+    
+    def run(self, text, signal=None):
+        print(text)
+        return {}
+
+#-------------------------------------------------------------------------------#
+
+class FloatRerouteForSubnodes:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "float": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 0.0, "forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("float",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, float):
+        return (float,)
+
+#-------------------------------------------------------------------------------#
+
+class SwapValues:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "_1_": (any_type,),
+                "_2_": (any_type,),
+                "swap": ("BOOLEAN", {"default": True})
+            }
+        }
+    
+    RETURN_TYPES = (any_type, any_type)
+    RETURN_NAMES = ("_2_", "_1_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, _1_, _2_, swap):
+        if swap:
+            return (_2_, _1_)
+        return (_1_, _2_)
+
+#-------------------------------------------------------------------------------#
+
 NODE_CLASS_MAPPINGS = {
     "SV-SimpleText": SimpleText,
     "SV-PromptProcessing": PromptProcessing,
@@ -1429,6 +1624,7 @@ NODE_CLASS_MAPPINGS = {
     "SV-BasicParamsOutput": BasicParamsOutput,
     "SV-SamplerNameToSampler": SamplerNameToSampler,
     "SV-StringSeparator": StringSeparator,
+    "SV-LoraSeparator": LoraSeparator,
     "SV-StringCombine": StringCombine,
     "SV-InputSelect": InputSelect,
     "SV-InputSelectBoolean": InputSelectBoolean,
@@ -1451,7 +1647,9 @@ NODE_CLASS_MAPPINGS = {
     "SV-FlowContinueSimple": FlowContinueSimple,
     "SV-FlowNode": FlowNode,
     "SV-CheckNone": CheckNone,
+    "SV-CheckNoneNot": CheckNoneNot,
     "SV-AnyToAny": AnyToAny,
+    "SV-ConsolePrint": ConsolePrint,
     "SV-FlowPipeInput": FlowPipeInput,
     "SV-FlowPipeInputLarge": FlowPipeInputLarge,
     "SV-FlowPipeInputIndex": FlowPipeInputIndex,
@@ -1462,7 +1660,9 @@ NODE_CLASS_MAPPINGS = {
     "SV-FlowPipeOutputLarge": FlowPipeOutputLarge,
     "SV-FlowPipeOutputIndex": FlowPipeOutputIndex,
     "SV-FlowPipeOutputKey": FlowPipeOutputKey,
-    "SV-FlowPipeOutputKeyTuple": FlowPipeOutputKeyTuple
+    "SV-FlowPipeOutputKeyTuple": FlowPipeOutputKeyTuple,
+    "SV-FloatRerouteForSubnodes": FloatRerouteForSubnodes,
+    "SV-SwapValues": SwapValues
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1476,6 +1676,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-BasicParamsOutput": "Params Output",
     "SV-SamplerNameToSampler": "Sampler Converter",
     "SV-StringSeparator": "String Separator",
+    "SV-LoraSeparator": "Lora Separator",
     "SV-StringCombine": "String Combine",
     "SV-InputSelect": "Input Select",
     "SV-InputSelectBoolean": "Boolean Select",
@@ -1498,7 +1699,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-FlowContinueSimple": "Simple Continue",
     "SV-FlowNode": "Flow Node",
     "SV-CheckNone": "Check None",
+    "SV-CheckNoneNot": "Check Not None",
     "SV-AnyToAny": "Any to Any",
+    "SV-ConsolePrint": "Console Print",
     "SV-FlowPipeInput": "Pipe In",
     "SV-FlowPipeInputLarge": "Pipe In Large",
     "SV-FlowPipeInputIndex": "Pipe In Index",
@@ -1509,7 +1712,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-FlowPipeOutputLarge": "Pipe Out Large",
     "SV-FlowPipeOutputIndex": "Pipe Out Index",
     "SV-FlowPipeOutputKey": "Pipe Out Key",
-    "SV-FlowPipeOutputKeyTuple": "Pipe Out Tuple"
+    "SV-FlowPipeOutputKeyTuple": "Pipe Out Tuple",
+    "SV-FloatRerouteForSubnodes": "Float",
+    "SV-SwapValues": "Swap"
 }
 
 #-------------------------------------------------------------------------------#
@@ -1561,9 +1766,17 @@ def build_var(name: str):
     if " " in name:
         return f"{var_char}({name})"
     return f"{var_char}{name}"
+def clean_prompt(prompt: str):
+    prompt = re.sub(r"\s*[\n\r,][,\s]*", ", ", prompt)
+    return re.sub(r"\s+", " ", prompt)
+def remove_comments(prompt: str):
+    # remove comments from prompt, accepts // and # comments
+    lines = prompt.split("\n")
+    lines = [line for line in lines if not line.strip().startswith("//") and not line.strip().startswith("#")]
+    return "\n".join(lines)
 def process(prompt, output: int, variables: str, seed: int):
-    prompt = re.sub(r"[\s,]*[\n\r]+[\s,]*", ", ", prompt)
-    prompt = re.sub(r"\s+", " ", prompt)
+    prompt = remove_comments(prompt)
+    prompt = clean_prompt(prompt)
     
     vars = parse_vars(variables)
     names: list[str] = vars.keys()
@@ -1588,9 +1801,7 @@ def process(prompt, output: int, variables: str, seed: int):
         previous_prompt = prompt
         depth += 1
     
-    prompt = re.sub(r"[\s\n\r]*,[,\s\n\r]*", ", ", prompt)
-    prompt = re.sub(r"\s+", " ", prompt)
-    return prompt
+    return clean_prompt(prompt)
 
 def log_error(message):
     return
