@@ -1,14 +1,19 @@
 import os
+import time
 import comfy.samplers
 import folder_paths
+import node_helpers
 import hashlib
 import math
 import random as _random
 import json
 import re
 import torch
+import sys
 
 class AnyType(str):
+    def __eq__(self, __value: object) -> bool:
+        return True
     def __ne__(self, __value: object) -> bool:
         return False
 
@@ -64,15 +69,133 @@ class PromptProcessing:
     CATEGORY = "SV Nodes/Processing"
     
     def run(self, text, variables="", seed=1):
-        if not isinstance(text, str) or not isinstance(variables, str):
-            raise TypeError("Invalid text input type")
-        if not isinstance(seed, int):
-            raise TypeError("Invalid seed input type")
+        text = remove_comments(text)
         return process(text, 0, variables, seed), process(text, 1, variables, seed), process(text, 2, variables, seed)
     
     @classmethod
     def IS_CACHED(s, text, variables, seed):
         return f"{text} {variables} {seed}"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingRecursive:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"forceInput": True}),
+                "step": ("INT", {"forceInput": True}),
+                "progress": ("FLOAT", {"forceInput": True}),
+            },
+            "optional": {
+                "variables": ("STRING", {"forceInput": True, "default": ""}),
+                "seed": ("INT", {"forceInput": True, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt", "lora")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, text, step, progress, variables="", seed=1):
+        text = remove_comments(text)
+        return LoraSeparator.run(self, process_advanced(text, variables, seed, step, progress))
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingAdvanced:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"forceInput": True}),
+                "steps": ("INT", {"forceInput": True}),
+            },
+            "optional": {
+                "phase": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
+                "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_prompt", "STRING")
+    RETURN_NAMES = ("prompt", "lora")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, prompt, steps, phase=1, variables="", seed=1):
+        prompt = remove_comments(prompt)
+        prompt, lora = LoraSeparator.run(self, prompt)
+        parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
+        full_positive = parts[0]
+        full_negative = parts[1] if len(parts) > 1 else ""
+        
+        result = []
+        
+        for i in range(1, steps + 1):
+            pos = process_advanced(full_positive, variables, seed, i, i / steps + phase - 1)
+            neg = process_advanced(full_negative, variables, seed, i, i / steps + phase - 1)
+            result.append((pos, neg))
+        
+        return result, lora
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingEncode:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "clip": ("CLIP",),
+                "prompt": ("sv_prompt",),
+            }
+        }
+    
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("positive", "negative")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, clip, prompt):
+        steps = len(prompt)
+        cache = {}
+        pconds = []
+        nconds = []
+        
+        for i in range(1, steps + 1):
+            start = (i - 1) / steps
+            end = i / steps
+            pos, neg = prompt[i - 1]
+            
+            if pos not in cache:
+                cache[pos] = encode(clip, pos)
+            pcond = node_helpers.conditioning_set_values(cache[pos], {"start_percent": start, "end_percent": end})
+            pconds += pcond
+            if neg not in cache:
+                cache[neg] = encode(clip, neg)
+            ncond = node_helpers.conditioning_set_values(cache[neg], {"start_percent": start, "end_percent": end})
+            nconds += ncond
+        
+        return pconds, nconds
+
+def encode(clip, text):
+    tokens = clip.tokenize(text)
+    output = clip.encode_from_tokens(tokens, return_pooled=True, return_dict=True)
+    cond = output.pop("cond")
+    return [[cond, output]]
 
 #-------------------------------------------------------------------------------#
 
@@ -189,6 +312,34 @@ class ResolutionSelector2Output:
 
 #-------------------------------------------------------------------------------#
 
+class NormalizeImageSize:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "width": ("INT", {"forceInput": True}),
+                "height": ("INT", {"forceInput": True}),
+                "size": ("INT", {"min": 64, "max": 4096, "step": 64, "default": 768})
+            }
+        }
+    
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("width", "height")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    def run(self, width, height, size):
+        ratio = math.sqrt(float(width) / float(height))
+        width = math.floor(size * ratio / 64) * 64
+        height = math.floor(size / ratio / 64) * 64
+        return width, height
+
+#-------------------------------------------------------------------------------#
+
 class BasicParams:
     def __init__(self):
         pass
@@ -219,7 +370,7 @@ class BasicParams:
             raise TypeError("Invalid denoise input type")
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
-        return ((cfg, steps, denoise, sampler, "normal"),)
+        return ((cfg, steps, denoise, sampler, "normal", False),)
 
 #-------------------------------------------------------------------------------#
 
@@ -235,7 +386,7 @@ class BasicParamsPlus:
                 "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
                 "denoise": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 1.0}),
                 "sampler": (comfy.samplers.SAMPLER_NAMES,),
-                "scheduler": (comfy.samplers.SCHEDULER_NAMES,)
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES + ["ays"],)
             }
         }
     
@@ -254,7 +405,42 @@ class BasicParamsPlus:
             raise TypeError("Invalid denoise input type")
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
-        return ((cfg, steps, denoise, sampler, scheduler),)
+        return ((cfg, steps, denoise, sampler, scheduler, scheduler == "ays"),)
+
+#-------------------------------------------------------------------------------#
+
+class BasicParamsCustom:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {},
+            "optional": {
+                "cfg": ("FLOAT", {"min": 0, "max": 20, "step": 0.1, "default": 8.0}),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
+                "sampler": (comfy.samplers.SAMPLER_NAMES,),
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES + ["ays"],),
+            }
+        }
+    
+    RETURN_TYPES = ("BP_OUTPUT",)
+    RETURN_NAMES = ("packet",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    def run(self, cfg=8.0, steps=10, sampler="euler", scheduler="normal"):
+        if not isinstance(cfg, float) and not isinstance(cfg, int):
+            raise TypeError("Invalid cfg input type")
+        if not isinstance(steps, int):
+            raise TypeError("Invalid steps input type")
+        if not isinstance(sampler, str):
+            raise TypeError("Invalid sampler input type")
+        if not isinstance(scheduler, str):
+            raise TypeError("Invalid scheduler input type")
+        return ((cfg, steps, 1.0, sampler, scheduler, scheduler == "ays"),)
 
 #-------------------------------------------------------------------------------#
 
@@ -270,8 +456,8 @@ class BasicParamsOutput:
             }
         }
     
-    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES)
-    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler")
+    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES, "BOOLEAN")
+    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler", "ays")
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Input"
@@ -279,9 +465,15 @@ class BasicParamsOutput:
     def run(self, packet):
         if not isinstance(packet, tuple):
             raise TypeError("Invalid packet input type")
-        if len(packet) != 5:
+        if len(packet) != 6:
             raise ValueError("Invalid packet length")
-        return packet[0], packet[1], packet[2], packet[3], packet[4]
+        cfg = packet[0] or 8.0
+        steps = packet[1] or 10
+        denoise = packet[2] or 1.0
+        sampler = packet[3] or comfy.samplers.SAMPLER_NAMES[0]
+        scheduler = comfy.samplers.SCHEDULER_NAMES[0] if packet[4] in [None, "ays"] else packet[4]
+        ays = packet[5] or False
+        return cfg, steps, denoise, sampler, scheduler, ays
 
 #-------------------------------------------------------------------------------#
 
@@ -361,9 +553,8 @@ class LoraSeparator:
     CATEGORY = "SV Nodes/Processing"
     
     def run(self, text):
-        if not isinstance(text, str):
-            raise TypeError("Invalid text input type")
         prompt = re.sub(r"<l\w+:[^>]+>", "", text, 0, re.IGNORECASE)
+        text = remove_comments(text)
         lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
         return (prompt, lora)
 
@@ -555,13 +746,74 @@ class BooleanNot:
         }
     
     RETURN_TYPES = ("BOOLEAN",)
-    RETURN_NAMES = ("value",)
+    RETURN_NAMES = ("bool",)
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
     
     def run(self, value):
         return (not value,)
+
+#-------------------------------------------------------------------------------#
+
+class MathAddInt:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "int": ("INT", {"forceInput": True}),
+                "add": ("INT", {"default": 1, "min": -sys.maxsize, "max": sys.maxsize, "step": 1})
+            }
+        }
+    
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("int",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, int, add):
+        return (int + add,)
+
+#-------------------------------------------------------------------------------#
+
+class MathCompare:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "number": ("INT,FLOAT", {"forceInput": True}),
+                "operator": ([">", "<", ">=", "<=", "==", "!="],),
+                "other": ("FLOAT", {"default": 0, "min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("bool",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, number, other, operator):
+        if operator == "<":
+            return (number < other,)
+        if operator == ">":
+            return (number > other,)
+        if operator == "<=":
+            return (number <= other,)
+        if operator == ">=":
+            return (number >= other,)
+        if operator == "==":
+            return (number == other,)
+        if operator == "!=":
+            return (number != other,)
+        return (False,)
 
 #-------------------------------------------------------------------------------#
 
@@ -634,22 +886,102 @@ class SigmaContinue:
     CATEGORY = "SV Nodes/Sigmas"
     
     def run(self, source, imitate, steps):
-        if steps < 1:
+        if steps < 1 or len(source) < 1:
             return (torch.FloatTensor([]).cpu(),)
         lastSigma = source[-1].item()
         if lastSigma < 0.0001:
-            raise ValueError("Invalid source sigma")
-        imitateRaw = imitate.tolist()
-        length = len(imitateRaw)
-        start = 0
-        while lastSigma < imitateRaw[start]:
-            start += 1
-        result = [lastSigma]
-        for i in range(1, steps + 1):
-            progress = i / steps
-            sigma_i = round((length - 1 - start) * progress + start)
-            result.append(imitateRaw[sigma_i])
-        return (torch.FloatTensor(result).cpu(),)
+            return (torch.FloatTensor([]).cpu(),)
+        return (torch.FloatTensor(calculate_sigma_range(imitate.tolist(), lastSigma, 0, steps)).cpu(),)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaContinueLinear:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "source": ("SIGMAS",),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, source, steps):
+        if steps < 1 or len(source) < 1:
+            return (torch.FloatTensor([]).cpu(),)
+        lastSigma = source[-1].item()
+        if lastSigma < 0.0001:
+            return (torch.FloatTensor([]).cpu(),)
+        step = lastSigma / steps
+        return (torch.FloatTensor([step * i for i in reversed(range(0, steps + 1))]).cpu(),)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaRemap:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",),
+                "start": ("FLOAT", {"default": 0, "min": 0, "max": 1, "step": 0.01}),
+                "end": ("FLOAT", {"default": 1, "min": 0, "max": 1, "step": 0.01}),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas, start, end, steps):
+        return (torch.FloatTensor(calculate_sigma_range_percent(sigmas.tolist(), start, end, steps)).cpu(),)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaConcat:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas1": ("SIGMAS",),
+                "sigmas2": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas1, sigmas2):
+        list1 = sigmas1.tolist()
+        list2 = sigmas2.tolist()
+        if len(list1) < 1:
+            return (torch.FloatTensor(list2).cpu(),)
+        if len(list2) < 1:
+            return (torch.FloatTensor(list1).cpu(),)
+        if list1[-1] == list2[0]:
+            list2 = list2[1:]
+        if len(list2) < 1:
+            return (torch.FloatTensor(list1).cpu(),)
+        return (torch.FloatTensor(list1 + list2).cpu(),)
 
 #-------------------------------------------------------------------------------#
 
@@ -812,22 +1144,51 @@ class CacheShield:
     @classmethod
     def IS_CACHED(s, any):
         try:
-            if isinstance(any, (tuple, list)):
-                is_changed = False
-                for item in any:
-                    is_changed = is_changed or CacheShield.IS_CHANGED(s, item)
-                return is_changed
-            elif isinstance(any, (str, int, float, bool, type(None))):
-                return any
-            elif isinstance(any, (list, tuple, dict)):
-                return hashlib.md5(json.dumbs(any, sort_keys=True).encode()).hexdigest()
-            else:
-                if hasattr(any, "__dict__"):
-                    return hashlib.md5(json.dumps(any.__dict__, sort_keys=True).encode()).hexdigest()
-                else:
-                    return hashlib.md5(repr(any).encode()).hexdigest()
+            return hash_item(any)
         except:
             return ""
+
+def hash_item(item):
+    if isinstance(item, (tuple, list)):
+        temp = ""
+        for item in item:
+            temp += hash_item(item)
+        return hashlib.md5(temp.encode()).hexdigest()
+    elif isinstance(item, (str, int, float, bool, type(None))):
+        return hashlib.md5(str(item).encode()).hexdigest()
+    elif hasattr(item, "model") and hasattr(item.model, "state_dict"):
+        # Hashing a model takes too long to be worth it
+        return ""
+    elif isinstance(item, (list, tuple, dict)):
+        return hashlib.md5(json.dumps(item, sort_keys=True).encode()).hexdigest()
+    else:
+        if hasattr(item, "__dict__"):
+            return hashlib.md5(json.dumps(item.__dict__, sort_keys=True).encode()).hexdigest()
+        else:
+            return hashlib.md5(repr(item).encode()).hexdigest()
+
+#-------------------------------------------------------------------------------#
+
+class HashModel:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",)
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("hash",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, model):
+        return (hashlib.md5(str(model.model.state_dict()).encode()).hexdigest(),)
 
 #-------------------------------------------------------------------------------#
 
@@ -977,47 +1338,15 @@ class FlowBlockSimple:
         return None
 
 #-------------------------------------------------------------------------------#
+# Strongly referencing rgthree's any switch
 
-class FlowSelect:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "select": ("INT", {"min": 1, "max": 5, "step": 1}),
-            },
-            "optional": {
-                "_1_": (any_type, {"default": None}),
-                "_2_": (any_type, {"default": None}),
-                "_3_": (any_type, {"default": None}),
-                "_4_": (any_type, {"default": None}),
-                "_5_": (any_type, {"default": None}),
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("out",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, select, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
-        raise NotImplementedError("This node is not working yet")
-        if select == 1:
-            return (_1_,)
-        if select == 2:
-            return (_2_,)
-        if select == 3:
-            return (_3_,)
-        if select == 4:
-            return (_4_,)
-        if select == 5:
-            return (_5_,)
-        return (None,)
-
-#-------------------------------------------------------------------------------#
+def is_none(value):
+    if value is not None:
+        if isinstance(value, dict) and 'model' in value and 'clip' in value:
+            return is_context_empty(value)
+    return value is None
+def is_context_empty(ctx):
+    return not ctx or all(v is None for v in ctx.values())
 
 class FlowContinue:
     CONTINUE = True
@@ -1028,8 +1357,7 @@ class FlowContinue:
     @classmethod
     def INPUT_TYPES(s):
         return {
-            "required": {
-            },
+            "required": {},
             "optional": {
                 "_1_": (any_type,),
                 "_2_": (any_type,),
@@ -1045,10 +1373,10 @@ class FlowContinue:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Flow"
     
-    def run(self, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
-        for i, any in enumerate((_1_, _2_, _3_, _4_, _5_)):
-            if any is not None:
-                return (any, i+1)
+    def run(self, **kwargs):
+        for key, value in kwargs.items():
+            if key.startswith("_") and key.endswith("_") and not is_none(value):
+                return (value, parse_index(key))
         return (None, 0)
 
 #-------------------------------------------------------------------------------#
@@ -1504,13 +1832,18 @@ class FlowPipeOutputKeyTuple:
     CATEGORY = "SV Nodes/Pipes"
     
     def run(self, pipe, key):
+        empty = (None, None, None, None, None)
+        if key not in pipe or key is None or len(key) == 0:
+            return (pipe, *empty)
         if not isinstance(pipe, dict):
-            raise TypeError("Invalid pipe input type")
+            raise TypeError(f"Invalid pipe input type with key '{key}'")
         if not isinstance(key, str):
-            raise TypeError("Invalid key input type")
+            raise TypeError(f"Invalid key input type with key '{key}'")
         value = pipe.get(key, None)
+        if value is None:
+            return (pipe, *empty)
         if not isinstance(value, (tuple, list)):
-            raise ValueError("Invalid value type")
+            raise ValueError(f"Invalid value type with key '{key}'")
         return (pipe, *value)
 
 #-------------------------------------------------------------------------------#
@@ -1603,11 +1936,114 @@ class ConsolePrint:
     RETURN_TYPES = ()
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes/Output"
+    CATEGORY = "SV Nodes/Debug"
     
     def run(self, text, signal=None):
         print(text.replace("_signal_", str(signal)))
         return {}
+
+#-------------------------------------------------------------------------------#
+
+class ConsolePrintMulti:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True}),
+                "signal1": (any_type,),
+            },
+            "optional": {
+                "signal2": (any_type,),
+                "signal3": (any_type,),
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ()
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Debug"
+    
+    def run(self, text, signal1, signal2=None, signal3=None):
+        print(text.replace("_signal1_", str(signal1)).replace("_signal2_", str(signal2)).replace("_signal3_", str(signal3)))
+        return {}
+
+#-------------------------------------------------------------------------------#
+
+class AssertNotNone:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,)
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ()
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Debug"
+    
+    def run(self, any):
+        if any is None:
+            raise ValueError("AssertNotNone: Value is None")
+        return {}
+
+#-------------------------------------------------------------------------------#
+
+class TimerStart:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,)
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = (any_type, "TIMER")
+    RETURN_NAMES = ("any", "timestamp")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Debug"
+    
+    def run(self, any):
+        return (any, time.time())
+
+#-------------------------------------------------------------------------------#
+
+class TimerEnd:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "timestamp": ("TIMER",)
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = (any_type, "FLOAT")
+    RETURN_NAMES = ("any", "time")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Debug"
+    
+    def run(self, any, timestamp):
+        return (any, time.time() - timestamp)
 
 #-------------------------------------------------------------------------------#
 
@@ -1664,11 +2100,16 @@ class SwapValues:
 NODE_CLASS_MAPPINGS = {
     "SV-SimpleText": SimpleText,
     "SV-PromptProcessing": PromptProcessing,
+    "SV-PromptProcessingRecursive": PromptProcessingRecursive,
+    "SV-PromptProcessingAdvanced": PromptProcessingAdvanced,
+    "SV-PromptProcessingEncode": PromptProcessingEncode,
     "SV-ResolutionSelector": ResolutionSelector,
     "SV-ResolutionSelector2": ResolutionSelector2,
     "SV-ResolutionSelector2Output": ResolutionSelector2Output,
+    "SV-NormalizeImageSize": NormalizeImageSize,
     "SV-BasicParams": BasicParams,
     "SV-BasicParamsPlus": BasicParamsPlus,
+    "SV-BasicParamsCustom": BasicParamsCustom,
     "SV-BasicParamsOutput": BasicParamsOutput,
     "SV-SamplerNameToSampler": SamplerNameToSampler,
     "SV-StringSeparator": StringSeparator,
@@ -1679,20 +2120,26 @@ NODE_CLASS_MAPPINGS = {
     "SV-LoadTextFile": LoadTextFile,
     "SV-SaveTextFile": SaveTextFile,
     "SV-BooleanNot": BooleanNot,
+    "SV-MathAddInt": MathAddInt,
+    "SV-MathCompare": MathCompare,
     "SV-SigmaOneStep": SigmaOneStep,
     "SV-SigmaRange": SigmaRange,
     "SV-SigmaContinue": SigmaContinue,
+    "SV-SigmaContinueLinear": SigmaContinueLinear,
+    "SV-SigmaRemap": SigmaRemap,
+    "SV-SigmaConcat": SigmaConcat,
     "SV-SigmaAsFloat": SigmaAsFloat,
     "SV-SigmaLength": SigmaLength,
     "SV-ModelName": ModelName,
     "SV-PromptPlusModel": PromptPlusModel,
     "SV-PromptPlusModelOutput": PromptPlusModelOutput,
     "SV-CacheShield": CacheShield,
+    "SV-CacheShieldProxy": CacheShieldProxy,
+    "SV-HashModel": HashModel,
     "SV-FlowManualCache": FlowManualCache,
     "SV-FlowBlockSignal": FlowBlockSignal,
     "SV-FlowBlock": FlowBlock,
     "SV-FlowBlockSimple": FlowBlockSimple,
-    # "SV-FlowSelect": FlowSelect,
     "SV-FlowContinue": FlowContinue,
     "SV-FlowContinueSimple": FlowContinueSimple,
     "SV-FlowNode": FlowNode,
@@ -1700,6 +2147,10 @@ NODE_CLASS_MAPPINGS = {
     "SV-CheckNoneNot": CheckNoneNot,
     "SV-AnyToAny": AnyToAny,
     "SV-ConsolePrint": ConsolePrint,
+    "SV-ConsolePrintMulti": ConsolePrintMulti,
+    "SV-AssertNotNone": AssertNotNone,
+    "SV-TimerStart": TimerStart,
+    "SV-TimerEnd": TimerEnd,
     "SV-FlowPipeInput": FlowPipeInput,
     "SV-FlowPipeInputLarge": FlowPipeInputLarge,
     "SV-FlowPipeInputIndex": FlowPipeInputIndex,
@@ -1718,11 +2169,16 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-SimpleText": "Simple Text",
     "SV-PromptProcessing": "Prompt Processing",
+    "SV-PromptProcessingRecursive": "Recursive Processing",
+    "SV-PromptProcessingAdvanced": "Advanced Processing",
+    "SV-PromptProcessingEncode": "Encode Prompt",
     "SV-ResolutionSelector": "Resolution Selector",
     "SV-ResolutionSelector2": "Resolution Selector 2",
     "SV-ResolutionSelector2Output": "Selector Output",
+    "SV-NormalizeImageSize": "Normalize Image Size",
     "SV-BasicParams": "Params",
     "SV-BasicParamsPlus": "Params Plus",
+    "SV-BasicParamsCustom": "Params Custom",
     "SV-BasicParamsOutput": "Params Output",
     "SV-SamplerNameToSampler": "Sampler Converter",
     "SV-StringSeparator": "String Separator",
@@ -1733,20 +2189,26 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-LoadTextFile": "Load Text File",
     "SV-SaveTextFile": "Save Text File",
     "SV-BooleanNot": "Boolean Not",
+    "SV-MathAddInt": "Add Int",
+    "SV-MathCompare": "Compare",
     "SV-SigmaOneStep": "Sigmas One Step",
     "SV-SigmaRange": "Sigma Range",
     "SV-SigmaContinue": "Sigma Continue",
+    "SV-SigmaContinueLinear": "Sigma Linear",
+    "SV-SigmaRemap": "Sigma Remap",
+    "SV-SigmaConcat": "Sigma Concat",
     "SV-SigmaAsFloat": "Sigma As Float",
     "SV-SigmaLength": "Sigma Length",
     "SV-ModelName": "Model Name",
     "SV-PromptPlusModel": "Prompt + Model",
     "SV-PromptPlusModelOutput": "P+M Output",
     "SV-CacheShield": "Cache Shield",
+    "SV-CacheShieldProxy": "Cache Proxy",
+    "SV-HashModel": "Hash Model",
     "SV-FlowManualCache": "Manual Cache",
     "SV-FlowBlockSignal": "Block Signal",
     "SV-FlowBlock": "Flow Block",
     "SV-FlowBlockSimple": "Simple Block",
-    # "SV-FlowSelect": "Flow Select",
     "SV-FlowContinue": "Flow Continue",
     "SV-FlowContinueSimple": "Simple Continue",
     "SV-FlowNode": "Flow Node",
@@ -1754,6 +2216,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-CheckNoneNot": "Check Not None",
     "SV-AnyToAny": "Any to Any",
     "SV-ConsolePrint": "Console Print",
+    "SV-ConsolePrintMulti": "Console Print Multi",
+    "SV-AssertNotNone": "Assert Not None",
+    "SV-TimerStart": "Timer Start",
+    "SV-TimerEnd": "Timer End",
     "SV-FlowPipeInput": "Pipe In",
     "SV-FlowPipeInputLarge": "Pipe In Large",
     "SV-FlowPipeInputIndex": "Pipe In Index",
@@ -1771,10 +2237,38 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 #-------------------------------------------------------------------------------#
 
+def approx_index(reference: list[float], value: float):
+    if value > reference[0]:
+        raise ValueError("Value is greater than the maximum value in the reference list")
+    if value == 0:
+        return len(reference) - 1
+    for i in range(len(reference)):
+        if value > reference[i]:
+            return i - 1 + (value - reference[i-1]) / (reference[i] - reference[i-1])
+
+def calculate_sigma_range(reference: list[float], start: float, end: float, steps: int):
+    start_percentage = approx_index(reference, start) / (len(reference) - 1)
+    end_percentage = approx_index(reference, end) / (len(reference) - 1)
+    return calculate_sigma_range_percent(reference, start_percentage, end_percentage, steps)
+
+def calculate_sigma_range_percent(reference: list[float], start: float, end: float, steps: int):
+    sigmas = []
+    dist = (end - start) / steps
+    for i in range(steps + 1):
+        approx = (start + dist * i) * (len(reference) - 1)
+        delta = approx - int(approx)
+        lower_index = math.floor(approx)
+        upper_index = math.ceil(approx)
+        sigmas.append(reference[lower_index] + delta * (reference[upper_index] - reference[lower_index]))
+    return sigmas
+
+#-------------------------------------------------------------------------------#
+
 processing_depth = 5
 var_char = "$"
-char_open = "{"
-char_close = "}"
+char_pair = ("{", "}")
+adv_char_pair = ("[", "]")
+bracket_pairs = [("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")]
 
 #-------------------------------------------------------------------------------#
 
@@ -1820,7 +2314,8 @@ def build_var(name: str):
     return f"{var_char}{name}"
 def clean_prompt(prompt: str):
     prompt = re.sub(r"\s*[\n\r,][,\s]*", ", ", prompt)
-    return re.sub(r"\s+", " ", prompt)
+    prompt = re.sub(r"\s+", " ", prompt)
+    return re.sub(r"[,\s]+$", "", prompt)
 def remove_comments(prompt: str):
     # remove comments from prompt, accepts // and # comments
     lines = prompt.split("\n")
@@ -1857,12 +2352,24 @@ def process(prompt, output: int, variables: str, seed: int):
 
 def log_error(message):
     return
+def error_context(text, i):
+    return text[max(0, i-10):min(len(text), i+10)]
 def is_opening(text, i):
-    list = [char_open, '{', '(', '[', '<']
+    list = [char_pair, adv_char_pair] + bracket_pairs
+    list = [item[0] for item in list]
     return text[i] in list and (i == 0 or text[i-1] != '\\')
 def is_closing(text, i):
-    list = [char_close, '}', ')', ']', '>']
+    list = [char_pair, adv_char_pair] + bracket_pairs
+    list = [item[1] for item in list]
     return text[i] in list and (i == 0 or text[i-1] != '\\')
+def get_pair(bracket: str, opening: bool):
+    list = [char_pair, adv_char_pair] + bracket_pairs
+    for pair in list:
+        if opening and pair[0] == bracket:
+            return pair[1]
+        if not opening and pair[1] == bracket:
+            return pair[0]
+    return None
 def decode(text: str, output: int, seed: int):
     depth = 0
     start = -1
@@ -1880,7 +2387,7 @@ def decode(text: str, output: int, seed: int):
         i += 1
         
         if is_opening(text, i):
-            if depth == 0 and text[i] != char_open:
+            if depth == 0 and text[i] != char_pair[0]:
                 continue
             if depth == 0:
                 start = i
@@ -1888,7 +2395,7 @@ def decode(text: str, output: int, seed: int):
         elif is_closing(text, i):
             if depth > 0:
                 depth -= 1
-            if depth == 0 and text[i] == char_close and start != -1:
+            if depth == 0 and text[i] == char_pair[1] and start != -1:
                 end = i
         elif text[i] == '|' and depth == 1:
             splits.append(i)
@@ -1938,5 +2445,193 @@ def decode(text: str, output: int, seed: int):
             end = -1
             splits = []
             mode = "random"
+    
+    return text
+
+#-------------------------------------------------------------------------------#
+# Advanced Prompt Processing
+
+def process_advanced(prompt, variables: str, seed: int, step: int, progress: float):
+    prompt = remove_comments(prompt)
+    prompt = clean_prompt(prompt)
+    
+    if len(prompt) == 0:
+        return prompt
+    
+    vars = parse_vars(variables)
+    names: list[str] = vars.keys()
+    names = sorted(names, key=len, reverse=True)
+    
+    depth = 0
+    previous_prompt = prompt
+    while depth < processing_depth:
+        prompt = decode_advanced(prompt, seed, step, progress)
+        
+        for name in names:
+            if name not in prompt:
+                continue
+            
+            text = vars[name]
+            if " " not in name:
+                prompt = prompt.replace(f"{var_char}{name}", text)
+            prompt = prompt.replace(f"{var_char}({name})", text)
+        
+        if prompt == previous_prompt:
+            break
+        previous_prompt = prompt
+        depth += 1
+    
+    return clean_prompt(prompt)
+
+def decode_advanced(text: str, seed: int, step: int, progress: float):
+    depth = 0
+    start = -1
+    end = -1
+    mode = ""
+    splits = []
+    pipes = 0
+    colons = 0
+    rand = _random.Random(seed)
+    
+    if len(text) == 0:
+        return text
+    
+    brackets = []
+    i = -1
+    while i + 1 < len(text):
+        i += 1
+        
+        closing = is_closing(text, i) and not is_opening(text, i)
+        if closing and len(brackets) == 0:
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        if closing and brackets[-1][1] != get_pair(text[i], False):
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        closing = is_closing(text, i) and len(brackets) and brackets[-1][1] == get_pair(text[i], False)
+        opening = not closing and is_opening(text, i)
+        
+        if opening:
+            brackets.append((i, text[i]))
+            if depth == 0 and text[i] not in [char_pair[0], adv_char_pair[0]]:
+                continue
+            if depth == 0:
+                start = i
+                mode = "curly" if text[i] == char_pair[0] else "square"
+            depth += 1
+        elif closing:
+            prev = brackets.pop()
+            if prev[1] != get_pair(text[i], False):
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth == 1 and text[i] in [char_pair[1], adv_char_pair[1]] and start != -1:
+                end = i
+            if depth <= 0 and text[i] in [char_pair[1], adv_char_pair[1]]:
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth > 0:
+                depth -= 1
+        elif text[i] == '|' and depth == 1:
+            splits.append((i, '|'))
+            pipes += 1
+        elif text[i] == ':' and depth == 1:
+            splits.append((i, ':'))
+            colons += 1
+        
+        if end != -1:
+            if mode == "curly" and pipes + colons == 0:
+                text = text[:start] + text[start+1:end] + text[end+1:]
+            elif mode == "curly" and colons > 0 and pipes > 0:
+                raise ValueError(f"Invalid curly bracket content at {text[start:end+1]}")
+            elif mode == "curly" and colons > 0:
+                # part1 = text[start+1:splits[0][0]]
+                # text = text[:start] + part1 + text[end+1:]
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                
+                index = min(int(progress), len(parts) - 1)
+                part = parts[index]
+                text = text[:start] + part + text[end+1:]
+            elif mode == "curly" and pipes > 0:
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                
+                part = rand.choice(parts)
+                text = text[:start] + part + text[end+1:]
+            
+            elif mode == "square" and pipes + colons == 0:
+                text = text[:start] + text[start+1:end] + text[end+1:]
+            elif mode == "square" and pipes > 0 and colons > 0:
+                raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
+            elif mode == "square" and pipes > 0:
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                norm = (step - 1) % len(parts)
+                part = parts[norm]
+                text = text[:start] + part + text[end+1:]
+            elif mode == "square" and colons > 0:
+                if colons % 2 != 0:
+                    raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
+                parts = []
+                weights = []
+                if colons == 2:
+                    parts.append(text[start+1:splits[0][0]])
+                    parts.append(text[splits[0][0]+1:splits[1][0]])
+                    weight = text[splits[1][0]+1:end]
+                    weights = [weight, "end"]
+                else:
+                    for k in range(int(len(splits) / 2)):
+                        index = k * 2
+                        if index == 0:
+                            parts.append(text[start+1:splits[index][0]])
+                        else:
+                            parts.append(text[splits[index-1][0]+1:splits[index][0]])
+                        weights.append(text[splits[index][0]+1:splits[index+1][0]])
+                    parts.append(text[splits[-1][0]+1:end])
+                    for k in range(len(parts)):
+                        if re.match(r"'\d+", parts[k]) is not None:
+                            index = int(parts[k][1:]) - 1
+                            if index < 0 or index >= len(parts) or index == k:
+                                raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                            parts[k] = parts[index]
+                    weights.append("end")
+                
+                part = ""
+                for k in range(len(weights)):
+                    if weights[k] == "end":
+                        part = parts[k]
+                        break
+                    is_step = str(weights[k]).startswith("s")
+                    weight = int(weights[k][1:]) if is_step else float(weights[k])
+                    if is_step and step <= weight:
+                        part = parts[k]
+                        break
+                    if not is_step and progress <= weight:
+                        part = parts[k]
+                        break
+                    
+                text = text[:start] + part + text[end+1:]
+                
+            else:
+                raise ValueError("Unexpected bracket evaluation")
+            
+            i = start - 1
+            start = -1
+            end = -1
+            splits = []
+            mode = ""
+            pipes = 0
+            colons = 0
     
     return text
