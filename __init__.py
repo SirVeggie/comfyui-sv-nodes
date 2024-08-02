@@ -142,8 +142,10 @@ class PromptProcessingAdvanced:
         result = []
         
         for i in range(1, steps + 1):
-            pos = process_advanced(full_positive, variables, seed, i, i / steps + phase - 1)
-            neg = process_advanced(full_negative, variables, seed, i, i / steps + phase - 1)
+            progress = 1 if steps == 1 else (i - 1) / (steps - 1)
+            progress += phase - 1
+            pos = process_advanced(full_positive, variables, seed, i, progress)
+            neg = process_advanced(full_negative, variables, seed, i, progress)
             result.append((pos, neg))
         
         return result, lora
@@ -2063,10 +2065,79 @@ class FloatRerouteForSubnodes:
     RETURN_NAMES = ("float",)
     
     FUNCTION = "run"
-    CATEGORY = "SV Nodes/Logic"
+    CATEGORY = "SV Nodes/Flow"
     
     def run(self, float):
         return (float,)
+
+#-------------------------------------------------------------------------------#
+
+class ModelReroute:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",)
+            }
+        }
+    
+    RETURN_TYPES = ("MODEL",)
+    RETURN_NAMES = ("model",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, model):
+        return (model,)
+
+#-------------------------------------------------------------------------------#
+
+class SigmaReroute:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, sigmas):
+        return (sigmas,)
+
+#-------------------------------------------------------------------------------#
+
+class ConditioningReroute:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "conditioning": ("CONDITIONING",)
+            }
+        }
+    
+    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_NAMES = ("conditioning",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, conditioning):
+        return (conditioning,)
 
 #-------------------------------------------------------------------------------#
 
@@ -2163,6 +2234,9 @@ NODE_CLASS_MAPPINGS = {
     "SV-FlowPipeOutputKey": FlowPipeOutputKey,
     "SV-FlowPipeOutputKeyTuple": FlowPipeOutputKeyTuple,
     "SV-FloatRerouteForSubnodes": FloatRerouteForSubnodes,
+    "SV-ModelReroute": ModelReroute,
+    "SV-SigmaReroute": SigmaReroute,
+    "SV-ConditioningReroute": ConditioningReroute,
     "SV-SwapValues": SwapValues
 }
 
@@ -2232,6 +2306,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-FlowPipeOutputKey": "Pipe Out Key",
     "SV-FlowPipeOutputKeyTuple": "Pipe Out Tuple",
     "SV-FloatRerouteForSubnodes": "Float",
+    "SV-ModelReroute": "Model Reroute",
+    "SV-SigmaReroute": "Sigmas Reroute",
+    "SV-ConditioningReroute": "Conditioning Reroute",
     "SV-SwapValues": "Swap"
 }
 
