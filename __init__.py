@@ -12,6 +12,9 @@ import torch
 import sys
 from functools import partial
 
+#-------------------------------------------------------------------------------#
+# Helper classes
+
 class AnyType(str):
     def __eq__(self, __value: object) -> bool:
         return True
@@ -21,6 +24,13 @@ class AnyType(str):
 any_type = AnyType("*")
 
 #-------------------------------------------------------------------------------#
+# Mappings
+
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
+
+#-------------------------------------------------------------------------------#
+# Classes
 
 class SimpleText:
     def __init__(self):
@@ -44,6 +54,9 @@ class SimpleText:
         if not isinstance(text, str):
             raise TypeError("Invalid text input type")
         return (text,)
+
+NODE_CLASS_MAPPINGS["SV-SimpleText"] = SimpleText
+NODE_DISPLAY_NAME_MAPPINGS["SV-SimpleText"] = "Simple Text"
 
 #-------------------------------------------------------------------------------#
 
@@ -77,6 +90,9 @@ class PromptProcessing:
     def IS_CACHED(s, text, variables, seed):
         return f"{text} {variables} {seed}"
 
+NODE_CLASS_MAPPINGS["SV-PromptProcessing"] = PromptProcessing
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessing"] = "Prompt Processing"
+
 #-------------------------------------------------------------------------------#
 
 class PromptProcessingRecursive:
@@ -106,6 +122,9 @@ class PromptProcessingRecursive:
     def run(self, text, step, progress, variables="", seed=1):
         text = remove_comments(text)
         return LoraSeparator.run(self, process_advanced(text, variables, seed, step, progress))
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingRecursive"] = PromptProcessingRecursive
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingRecursive"] = "Recursive Processing"
 
 #-------------------------------------------------------------------------------#
 
@@ -150,6 +169,9 @@ class PromptProcessingAdvanced:
             result.append((pos, neg))
         
         return result, lora
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingAdvanced"] = PromptProcessingAdvanced
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingAdvanced"] = "Advanced Processing"
 
 #-------------------------------------------------------------------------------#
 
@@ -199,6 +221,9 @@ def encode(clip, text):
     output = clip.encode_from_tokens(tokens, return_pooled=True, return_dict=True)
     cond = output.pop("cond")
     return [[cond, output]]
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingEncode"] = PromptProcessingEncode
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingEncode"] = "Encode Prompt"
 
 #-------------------------------------------------------------------------------#
 
@@ -254,6 +279,9 @@ class ResolutionSelector:
             width, height = height, width
         return width, height
 
+NODE_CLASS_MAPPINGS["SV-ResolutionSelector"] = ResolutionSelector
+NODE_DISPLAY_NAME_MAPPINGS["SV-ResolutionSelector"] = "Resolution Selector"
+
 #-------------------------------------------------------------------------------#
 
 class ResolutionSelector2:
@@ -286,6 +314,9 @@ class ResolutionSelector2:
         result = ResolutionSelector.run(self, base, ratio, orientation, seed, random)
         return ((result[0], result[1], hires, batch),)
         
+NODE_CLASS_MAPPINGS["SV-ResolutionSelector2"] = ResolutionSelector2
+NODE_DISPLAY_NAME_MAPPINGS["SV-ResolutionSelector2"] = "Resolution Selector 2"
+
 #-------------------------------------------------------------------------------#
 
 class ResolutionSelector2Output:
@@ -312,6 +343,9 @@ class ResolutionSelector2Output:
         if len(packet) != 4:
             raise ValueError("Invalid packet length")
         return packet
+
+NODE_CLASS_MAPPINGS["SV-ResolutionSelector2Output"] = ResolutionSelector2Output
+NODE_DISPLAY_NAME_MAPPINGS["SV-ResolutionSelector2Output"] = "Selector Output"
 
 #-------------------------------------------------------------------------------#
 
@@ -341,6 +375,9 @@ class NormalizeImageSize:
         height = math.floor(size / ratio / 64) * 64
         return width, height
 
+NODE_CLASS_MAPPINGS["SV-NormalizeImageSize"] = NormalizeImageSize
+NODE_DISPLAY_NAME_MAPPINGS["SV-NormalizeImageSize"] = "Normalize Size"
+
 #-------------------------------------------------------------------------------#
 
 class NormalizeImageSize64:
@@ -366,6 +403,9 @@ class NormalizeImageSize64:
         width = math.floor(width / 64) * 64
         height = math.floor(height / 64) * 64
         return width, height
+
+NODE_CLASS_MAPPINGS["SV-NormalizeImageSize64"] = NormalizeImageSize64
+NODE_DISPLAY_NAME_MAPPINGS["SV-NormalizeImageSize64"] = "Normalize Size (64)"
 
 #-------------------------------------------------------------------------------#
 
@@ -400,6 +440,9 @@ class BasicParams:
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
         return ((cfg, steps, denoise, sampler, "normal", False),)
+
+NODE_CLASS_MAPPINGS["SV-BasicParams"] = BasicParams
+NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParams"] = "Params"
 
 #-------------------------------------------------------------------------------#
 
@@ -436,6 +479,9 @@ class BasicParamsPlus:
             raise TypeError("Invalid sampler input type")
         return ((cfg, steps, denoise, sampler, scheduler, scheduler == "ays"),)
 
+NODE_CLASS_MAPPINGS["SV-BasicParamsPlus"] = BasicParamsPlus
+NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsPlus"] = "Params Plus"
+
 #-------------------------------------------------------------------------------#
 
 class BasicParamsCustom:
@@ -471,6 +517,9 @@ class BasicParamsCustom:
             raise TypeError("Invalid scheduler input type")
         return ((cfg, steps, 1.0, sampler, scheduler, scheduler == "ays"),)
 
+NODE_CLASS_MAPPINGS["SV-BasicParamsCustom"] = BasicParamsCustom
+NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsCustom"] = "Params Custom"
+
 #-------------------------------------------------------------------------------#
 
 class BasicParamsOutput:
@@ -504,6 +553,10 @@ class BasicParamsOutput:
         scheduler = comfy.samplers.SCHEDULER_NAMES[0] if packet[4] in [None, "ays"] else packet[4]
         ays = packet[5] or False
         return cfg, steps, denoise, sampler, scheduler, ays, sampler2
+
+NODE_CLASS_MAPPINGS["SV-BasicParamsOutput"] = BasicParamsOutput
+NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsOutput"] = "Params Output"
+
 #-------------------------------------------------------------------------------#
 
 class SamplerNameToSampler:
@@ -530,6 +583,9 @@ class SamplerNameToSampler:
         if name not in comfy.samplers.SAMPLER_NAMES:
             raise ValueError("Invalid name")
         return (comfy.samplers.sampler_object(name),)
+
+NODE_CLASS_MAPPINGS["SV-SamplerNameToSampler"] = SamplerNameToSampler
+NODE_DISPLAY_NAME_MAPPINGS["SV-SamplerNameToSampler"] = "Sampler Converter"
 
 #-------------------------------------------------------------------------------#
 
@@ -561,6 +617,9 @@ class StringSeparator:
         parts = text.split(separator, 1)
         return parts[0], parts[1] if len(parts) > 1 else ""
 
+NODE_CLASS_MAPPINGS["SV-StringSeparator"] = StringSeparator
+NODE_DISPLAY_NAME_MAPPINGS["SV-StringSeparator"] = "String Separator"
+
 #-------------------------------------------------------------------------------#
 
 class LoraSeparator:
@@ -586,6 +645,9 @@ class LoraSeparator:
         text = remove_comments(text)
         lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
         return (prompt, lora)
+
+NODE_CLASS_MAPPINGS["SV-LoraSeparator"] = LoraSeparator
+NODE_DISPLAY_NAME_MAPPINGS["SV-LoraSeparator"] = "Lora Separator"
 
 #-------------------------------------------------------------------------------#
 
@@ -616,6 +678,9 @@ class StringCombine:
             raise TypeError("Invalid separator input type")
         separator = separator.replace("\\n", "\n").replace("\\t", "\t")
         return (part1 + separator + part2,)
+
+NODE_CLASS_MAPPINGS["SV-StringCombine"] = StringCombine
+NODE_DISPLAY_NAME_MAPPINGS["SV-StringCombine"] = "String Combine"
 
 #-------------------------------------------------------------------------------#
 
@@ -657,6 +722,9 @@ class InputSelect:
             return (_5_,)
         return (None,)
 
+NODE_CLASS_MAPPINGS["SV-InputSelect"] = InputSelect
+NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelect"] = "Input Select"
+
 #-------------------------------------------------------------------------------#
 
 class InputSelectBoolean:
@@ -685,6 +753,9 @@ class InputSelectBoolean:
         if select:
             return (on,)
         return (off,)
+
+NODE_CLASS_MAPPINGS["SV-InputSelectBoolean"] = InputSelectBoolean
+NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelectBoolean"] = "Boolean Select"
 
 #-------------------------------------------------------------------------------#
 
@@ -721,6 +792,9 @@ class LoadTextFile:
         except Exception as e:
             print(e)
             return ("", False)
+
+NODE_CLASS_MAPPINGS["SV-LoadTextFile"] = LoadTextFile
+NODE_DISPLAY_NAME_MAPPINGS["SV-LoadTextFile"] = "Load Text File"
 
 #-------------------------------------------------------------------------------#
 
@@ -760,6 +834,9 @@ class SaveTextFile:
         except:
             return (False,)
 
+NODE_CLASS_MAPPINGS["SV-SaveTextFile"] = SaveTextFile
+NODE_DISPLAY_NAME_MAPPINGS["SV-SaveTextFile"] = "Save Text File"
+
 #-------------------------------------------------------------------------------#
 
 class BooleanNot:
@@ -782,6 +859,9 @@ class BooleanNot:
     
     def run(self, value):
         return (not value,)
+
+NODE_CLASS_MAPPINGS["SV-BooleanNot"] = BooleanNot
+NODE_DISPLAY_NAME_MAPPINGS["SV-BooleanNot"] = "Boolean Not"
 
 #-------------------------------------------------------------------------------#
 
@@ -806,6 +886,9 @@ class MathAddInt:
     
     def run(self, int, add):
         return (int + add,)
+
+NODE_CLASS_MAPPINGS["SV-MathAddInt"] = MathAddInt
+NODE_DISPLAY_NAME_MAPPINGS["SV-MathAddInt"] = "Add Int"
 
 #-------------------------------------------------------------------------------#
 
@@ -844,6 +927,9 @@ class MathCompare:
             return (number != other,)
         return (False,)
 
+NODE_CLASS_MAPPINGS["SV-MathCompare"] = MathCompare
+NODE_DISPLAY_NAME_MAPPINGS["SV-MathCompare"] = "Compare"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaOneStep:
@@ -868,6 +954,9 @@ class SigmaOneStep:
         lastSigma = sigmas[-1].item()
         return (torch.FloatTensor([lastSigma, 0]).cpu(),)
 
+NODE_CLASS_MAPPINGS["SV-SigmaOneStep"] = SigmaOneStep
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaOneStep"] = "Sigmas One Step"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaRange:
@@ -891,6 +980,9 @@ class SigmaRange:
 
     def run(self, sigmas, start, end):
         return (sigmas[start:end + 1],)
+
+NODE_CLASS_MAPPINGS["SV-SigmaRange"] = SigmaRange
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaRange"] = "Sigma Range"
 
 #-------------------------------------------------------------------------------#
 
@@ -922,6 +1014,9 @@ class SigmaContinue:
             return (torch.FloatTensor([]).cpu(),)
         return (torch.FloatTensor(calculate_sigma_range(imitate.tolist(), lastSigma, 0, steps)).cpu(),)
 
+NODE_CLASS_MAPPINGS["SV-SigmaContinue"] = SigmaContinue
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaContinue"] = "Sigma Continue"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaContinueLinear:
@@ -952,6 +1047,9 @@ class SigmaContinueLinear:
         step = lastSigma / steps
         return (torch.FloatTensor([step * i for i in reversed(range(0, steps + 1))]).cpu(),)
 
+NODE_CLASS_MAPPINGS["SV-SigmaContinueLinear"] = SigmaContinueLinear
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaContinueLinear"] = "Sigma Linear"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaRemap:
@@ -977,6 +1075,9 @@ class SigmaRemap:
     
     def run(self, sigmas, start, end, steps):
         return (torch.FloatTensor(calculate_sigma_range_percent(sigmas.tolist(), start, end, steps)).cpu(),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaRemap"] = SigmaRemap
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaRemap"] = "Sigma Remap"
 
 #-------------------------------------------------------------------------------#
 
@@ -1012,6 +1113,9 @@ class SigmaConcat:
             return (torch.FloatTensor(list1).cpu(),)
         return (torch.FloatTensor(list1 + list2).cpu(),)
 
+NODE_CLASS_MAPPINGS["SV-SigmaConcat"] = SigmaConcat
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaConcat"] = "Sigma Concat"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaAsFloat:
@@ -1037,6 +1141,9 @@ class SigmaAsFloat:
             raise ValueError("Invalid sigmas length")
         return (sigmas[0].item(),)
 
+NODE_CLASS_MAPPINGS["SV-SigmaAsFloat"] = SigmaAsFloat
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaAsFloat"] = "Sigma As Float"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaLength:
@@ -1059,6 +1166,9 @@ class SigmaLength:
     
     def run(self, sigmas):
         return (len(sigmas),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaLength"] = SigmaLength
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaLength"] = "Sigma Length"
 
 #-------------------------------------------------------------------------------#
 
@@ -1084,6 +1194,9 @@ class ModelName:
         if not isinstance(model, str):
             raise TypeError("Invalid model input type")
         return (model,)
+
+NODE_CLASS_MAPPINGS["SV-ModelName"] = ModelName
+NODE_DISPLAY_NAME_MAPPINGS["SV-ModelName"] = "Model Name"
 
 #-------------------------------------------------------------------------------#
 
@@ -1120,6 +1233,9 @@ class PromptPlusModel:
             raise TypeError("Invalid prompt input type")
         return ((model, prompt),)
 
+NODE_CLASS_MAPPINGS["SV-PromptPlusModel"] = PromptPlusModel
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptPlusModel"] = "Prompt + Model"
+
 #-------------------------------------------------------------------------------#
 
 class PromptPlusModelOutput:
@@ -1146,6 +1262,9 @@ class PromptPlusModelOutput:
         if len(packet) != 2:
             raise ValueError("Invalid output length")
         return packet
+
+NODE_CLASS_MAPPINGS["SV-PromptPlusModelOutput"] = PromptPlusModelOutput
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptPlusModelOutput"] = "P+M Output"
 
 #-------------------------------------------------------------------------------#
 
@@ -1196,6 +1315,9 @@ def hash_item(item):
         else:
             return hashlib.md5(repr(item).encode()).hexdigest()
 
+NODE_CLASS_MAPPINGS["SV-CacheShield"] = CacheShield
+NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShield"] = "Cache Shield"
+
 #-------------------------------------------------------------------------------#
 
 class HashModel:
@@ -1218,6 +1340,9 @@ class HashModel:
     
     def run(self, model):
         return (hashlib.md5(str(model.model.state_dict()).encode()).hexdigest(),)
+
+NODE_CLASS_MAPPINGS["SV-HashModel"] = HashModel
+NODE_DISPLAY_NAME_MAPPINGS["SV-HashModel"] = "Hash Model"
 
 #-------------------------------------------------------------------------------#
 
@@ -1253,6 +1378,9 @@ class CacheShieldProxy:
     def IS_CACHED(s, check, **kwargs):
         return CacheShield.IS_CACHED(s, check)
 
+NODE_CLASS_MAPPINGS["SV-CacheShieldProxy"] = CacheShieldProxy
+NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShieldProxy"] = "Cache Proxy"
+
 #-------------------------------------------------------------------------------#
 
 class FlowManualCache:
@@ -1283,6 +1411,9 @@ class FlowManualCache:
             return "cached"
         return None
 
+NODE_CLASS_MAPPINGS["SV-FlowManualCache"] = FlowManualCache
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
+
 #-------------------------------------------------------------------------------#
 
 class FlowBlockSignal:
@@ -1312,6 +1443,9 @@ class FlowBlockSignal:
             return "blocked"
         return None
 
+NODE_CLASS_MAPPINGS["SV-FlowBlockSignal"] = FlowBlockSignal
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlockSignal"] = "Block Signal"
+
 #-------------------------------------------------------------------------------#
 
 class FlowBlock:
@@ -1335,6 +1469,9 @@ class FlowBlock:
     
     def run(self, signal, any):
         return (any,)
+
+NODE_CLASS_MAPPINGS["SV-FlowBlock"] = FlowBlock
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlock"] = "Flow Block"
 
 #-------------------------------------------------------------------------------#
 
@@ -1365,6 +1502,9 @@ class FlowBlockSimple:
         if enabled:
             return "blocked"
         return None
+
+NODE_CLASS_MAPPINGS["SV-FlowBlockSimple"] = FlowBlockSimple
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlockSimple"] = "Simple Block"
 
 #-------------------------------------------------------------------------------#
 # Strongly referencing rgthree's any switch
@@ -1408,6 +1548,9 @@ class FlowContinue:
                 return (value, parse_index(key))
         return (None, 0)
 
+NODE_CLASS_MAPPINGS["SV-FlowContinue"] = FlowContinue
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowContinue"] = "Flow Continue"
+
 #-------------------------------------------------------------------------------#
 
 class FlowContinueSimple:
@@ -1432,6 +1575,9 @@ class FlowContinueSimple:
     
     def run(self, any):
         return (any,)
+
+NODE_CLASS_MAPPINGS["SV-FlowContinueSimple"] = FlowContinueSimple
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowContinueSimple"] = "Simple Continue"
 
 #-------------------------------------------------------------------------------#
 
@@ -1461,6 +1607,9 @@ class FlowNode:
     
     def run(self, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
         return (_1_, _2_, _3_, _4_, _5_)
+
+NODE_CLASS_MAPPINGS["SV-FlowNode"] = FlowNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowNode"] = "Flow Node"
 
 #-------------------------------------------------------------------------------#
 
@@ -1509,6 +1658,9 @@ class FlowPipeInput:
         if kwargs.get("_5_", None) is not None:
             pipe[f"_{4 + start}_"] = kwargs.get("_5_", None)
         return (pipe,)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeInput"] = FlowPipeInput
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInput"] = "Pipe In"
 
 #-------------------------------------------------------------------------------#
 
@@ -1573,6 +1725,9 @@ class FlowPipeInputLarge:
             pipe[f"_{9 + start}_"] = kwargs.get("_10_", None)
         return (pipe,)
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputLarge"] = FlowPipeInputLarge
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputLarge"] = "Pipe In Large"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeInputIndex:
@@ -1610,6 +1765,9 @@ class FlowPipeInputIndex:
         pipe[f"_{index}_"] = value
         return (pipe,)
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputIndex"] = FlowPipeInputIndex
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputIndex"] = "Pipe In Index"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeInputKey:
@@ -1644,6 +1802,9 @@ class FlowPipeInputKey:
         pipe = {**pipe} if pipe else {}
         pipe[key] = value
         return (pipe,)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputKey"] = FlowPipeInputKey
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKey"] = "Pipe In Key"
 
 #-------------------------------------------------------------------------------#
 
@@ -1688,6 +1849,9 @@ class FlowPipeInputKeyTuple:
         pipe[key] = (value1, value2, value3, value4, value5)
         return (pipe,)
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputKeyTuple"] = FlowPipeInputKeyTuple
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKeyTuple"] = "Pipe In Tuple"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeCombine:
@@ -1721,6 +1885,9 @@ class FlowPipeCombine:
         pipe2 = {k: v for k, v in pipe2.items() if v is not None}
         return ({**pipe1, **pipe2},)
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeCombine"] = FlowPipeCombine
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeCombine"] = "Pipe Combine"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeOutput:
@@ -1750,6 +1917,9 @@ class FlowPipeOutput:
         if index < 1:
             raise ValueError("Invalid index value")
         return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutput"] = FlowPipeOutput
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutput"] = "Pipe Out"
 
 #-------------------------------------------------------------------------------#
 
@@ -1781,6 +1951,9 @@ class FlowPipeOutputLarge:
             raise ValueError("Invalid index value")
         return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None), pipe.get(f"_{5 + index}_", None), pipe.get(f"_{6 + index}_", None), pipe.get(f"_{7 + index}_", None), pipe.get(f"_{8 + index}_", None), pipe.get(f"_{9 + index}_", None))
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputLarge"] = FlowPipeOutputLarge
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputLarge"] = "Pipe Out Large"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeOutputIndex:
@@ -1811,6 +1984,9 @@ class FlowPipeOutputIndex:
             raise ValueError("Invalid index value")
         return (pipe, pipe.get(f"_{index}_", None))
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputIndex"] = FlowPipeOutputIndex
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputIndex"] = "Pipe Out Index"
+
 #-------------------------------------------------------------------------------#
 
 class FlowPipeOutputKey:
@@ -1838,6 +2014,9 @@ class FlowPipeOutputKey:
         if not isinstance(key, str):
             raise TypeError("Invalid key input type")
         return (pipe, pipe.get(key, None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputKey"] = FlowPipeOutputKey
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKey"] = "Pipe Out Key"
 
 #-------------------------------------------------------------------------------#
 
@@ -1875,6 +2054,9 @@ class FlowPipeOutputKeyTuple:
             raise ValueError(f"Invalid value type with key '{key}'")
         return (pipe, *value)
 
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputKeyTuple"] = FlowPipeOutputKeyTuple
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKeyTuple"] = "Pipe Out Tuple"
+
 #-------------------------------------------------------------------------------#
 
 class CheckNone:
@@ -1898,6 +2080,9 @@ class CheckNone:
     def run(self, any):
         return (any is None,)
 
+NODE_CLASS_MAPPINGS["SV-CheckNone"] = CheckNone
+NODE_DISPLAY_NAME_MAPPINGS["SV-CheckNone"] = "Check None"
+
 #-------------------------------------------------------------------------------#
 
 class CheckNoneNot:
@@ -1920,6 +2105,9 @@ class CheckNoneNot:
     
     def run(self, any):
         return (any is not None,)
+
+NODE_CLASS_MAPPINGS["SV-CheckNoneNot"] = CheckNoneNot
+NODE_DISPLAY_NAME_MAPPINGS["SV-CheckNoneNot"] = "Check Not None"
 
 #-------------------------------------------------------------------------------#
 
@@ -1947,6 +2135,9 @@ class DefaultInt:
             return (default,)
         return (any,)
 
+NODE_CLASS_MAPPINGS["SV-DefaultInt"] = DefaultInt
+NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultInt"] = "Default Int"
+
 #-------------------------------------------------------------------------------#
 
 class DefaultFloat:
@@ -1972,6 +2163,9 @@ class DefaultFloat:
         if any is None or not isinstance(any, float):
             return (default,)
         return (any,)
+
+NODE_CLASS_MAPPINGS["SV-DefaultFloat"] = DefaultFloat
+NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultFloat"] = "Default Float"
 
 #-------------------------------------------------------------------------------#
 
@@ -1999,6 +2193,9 @@ class DefaultString:
             return (default,)
         return (any,)
 
+NODE_CLASS_MAPPINGS["SV-DefaultString"] = DefaultString
+NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultString"] = "Default String"
+
 #-------------------------------------------------------------------------------#
 
 class DefaultBoolean:
@@ -2024,6 +2221,9 @@ class DefaultBoolean:
         if any is None or not isinstance(any, bool):
             return (default,)
         return (any,)
+
+NODE_CLASS_MAPPINGS["SV-DefaultBoolean"] = DefaultBoolean
+NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultBoolean"] = "Default Boolean"
 
 #-------------------------------------------------------------------------------#
 
@@ -2051,6 +2251,9 @@ class DefaultValue:
             return (default,)
         return (any,)
 
+NODE_CLASS_MAPPINGS["SV-DefaultValue"] = DefaultValue
+NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultValue"] = "Default Value"
+
 #-------------------------------------------------------------------------------#
 
 class AnyToAny:
@@ -2073,6 +2276,9 @@ class AnyToAny:
     
     def run(self, input):
         return (input,)
+
+NODE_CLASS_MAPPINGS["SV-AnyToAny"] = AnyToAny
+NODE_DISPLAY_NAME_MAPPINGS["SV-AnyToAny"] = "Any to Any"
 
 #-------------------------------------------------------------------------------#
 
@@ -2100,6 +2306,9 @@ class ConsolePrint:
     def run(self, text, signal=None):
         print(text.replace("_signal_", str(signal)))
         return {}
+
+NODE_CLASS_MAPPINGS["SV-ConsolePrint"] = ConsolePrint
+NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrint"] = "Console Print"
 
 #-------------------------------------------------------------------------------#
 
@@ -2130,6 +2339,9 @@ class ConsolePrintMulti:
         print(text.replace("_signal1_", str(signal1)).replace("_signal2_", str(signal2)).replace("_signal3_", str(signal3)))
         return {}
 
+NODE_CLASS_MAPPINGS["SV-ConsolePrintMulti"] = ConsolePrintMulti
+NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrintMulti"] = "Console Print Multi"
+
 #-------------------------------------------------------------------------------#
 
 class AssertNotNone:
@@ -2155,6 +2367,9 @@ class AssertNotNone:
             raise ValueError("AssertNotNone: Value is None")
         return {}
 
+NODE_CLASS_MAPPINGS["SV-AssertNotNone"] = AssertNotNone
+NODE_DISPLAY_NAME_MAPPINGS["SV-AssertNotNone"] = "Assert Not None"
+
 #-------------------------------------------------------------------------------#
 
 class TimerStart:
@@ -2178,6 +2393,9 @@ class TimerStart:
     
     def run(self, any):
         return (any, time.time())
+
+NODE_CLASS_MAPPINGS["SV-TimerStart"] = TimerStart
+NODE_DISPLAY_NAME_MAPPINGS["SV-TimerStart"] = "Timer Start"
 
 #-------------------------------------------------------------------------------#
 
@@ -2203,6 +2421,9 @@ class TimerEnd:
     
     def run(self, any, timestamp):
         return (any, time.time() - timestamp)
+
+NODE_CLASS_MAPPINGS["SV-TimerEnd"] = TimerEnd
+NODE_DISPLAY_NAME_MAPPINGS["SV-TimerEnd"] = "Timer End"
 
 #-------------------------------------------------------------------------------#
 
@@ -2283,6 +2504,9 @@ def parseCurvePart(part, x):
     multiplier = float(base)
     return multiplier * (x ** float(power))
 
+NODE_CLASS_MAPPINGS["SV-CurveFromEquation"] = CurveFromEquation
+NODE_DISPLAY_NAME_MAPPINGS["SV-CurveFromEquation"] = "Curve from Equation"
+
 #-------------------------------------------------------------------------------#
 
 class ApplyCurve:
@@ -2306,6 +2530,9 @@ class ApplyCurve:
     
     def run(self, curve, t):
         return (curve(t),)
+
+NODE_CLASS_MAPPINGS["SV-ApplyCurve"] = ApplyCurve
+NODE_DISPLAY_NAME_MAPPINGS["SV-ApplyCurve"] = "Apply Curve"
 
 #-------------------------------------------------------------------------------#
 
@@ -2338,6 +2565,9 @@ class ApplyCurveFromStep:
             return (curve(1),)
         return (curve((step - 1) / (steps - 1)),)
 
+NODE_CLASS_MAPPINGS["SV-ApplyCurveFromStep"] = ApplyCurveFromStep
+NODE_DISPLAY_NAME_MAPPINGS["SV-ApplyCurveFromStep"] = "Apply Curve from Step"
+
 #-------------------------------------------------------------------------------#
 
 class FloatRerouteForSubnodes:
@@ -2360,6 +2590,9 @@ class FloatRerouteForSubnodes:
     
     def run(self, float):
         return (float,)
+
+NODE_CLASS_MAPPINGS["SV-FloatRerouteForSubnodes"] = FloatRerouteForSubnodes
+NODE_DISPLAY_NAME_MAPPINGS["SV-FloatRerouteForSubnodes"] = "Float"
 
 #-------------------------------------------------------------------------------#
 
@@ -2384,6 +2617,9 @@ class ModelReroute:
     def run(self, model):
         return (model,)
 
+NODE_CLASS_MAPPINGS["SV-ModelReroute"] = ModelReroute
+NODE_DISPLAY_NAME_MAPPINGS["SV-ModelReroute"] = "Model Reroute"
+
 #-------------------------------------------------------------------------------#
 
 class SigmaReroute:
@@ -2407,6 +2643,9 @@ class SigmaReroute:
     def run(self, sigmas):
         return (sigmas,)
 
+NODE_CLASS_MAPPINGS["SV-SigmaReroute"] = SigmaReroute
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaReroute"] = "Sigmas Reroute"
+
 #-------------------------------------------------------------------------------#
 
 class ConditioningReroute:
@@ -2429,6 +2668,9 @@ class ConditioningReroute:
     
     def run(self, conditioning):
         return (conditioning,)
+
+NODE_CLASS_MAPPINGS["SV-ConditioningReroute"] = ConditioningReroute
+NODE_DISPLAY_NAME_MAPPINGS["SV-ConditioningReroute"] = "Conditioning Reroute"
 
 #-------------------------------------------------------------------------------#
 
@@ -2457,171 +2699,11 @@ class SwapValues:
             return (_2_, _1_)
         return (_1_, _2_)
 
-#-------------------------------------------------------------------------------#
-
-NODE_CLASS_MAPPINGS = {
-    "SV-SimpleText": SimpleText,
-    "SV-PromptProcessing": PromptProcessing,
-    "SV-PromptProcessingRecursive": PromptProcessingRecursive,
-    "SV-PromptProcessingAdvanced": PromptProcessingAdvanced,
-    "SV-PromptProcessingEncode": PromptProcessingEncode,
-    "SV-ResolutionSelector": ResolutionSelector,
-    "SV-ResolutionSelector2": ResolutionSelector2,
-    "SV-ResolutionSelector2Output": ResolutionSelector2Output,
-    "SV-NormalizeImageSize": NormalizeImageSize,
-    "SV-NormalizeImageSize64": NormalizeImageSize64,
-    "SV-BasicParams": BasicParams,
-    "SV-BasicParamsPlus": BasicParamsPlus,
-    "SV-BasicParamsCustom": BasicParamsCustom,
-    "SV-BasicParamsOutput": BasicParamsOutput,
-    "SV-SamplerNameToSampler": SamplerNameToSampler,
-    "SV-StringSeparator": StringSeparator,
-    "SV-LoraSeparator": LoraSeparator,
-    "SV-StringCombine": StringCombine,
-    "SV-InputSelect": InputSelect,
-    "SV-InputSelectBoolean": InputSelectBoolean,
-    "SV-LoadTextFile": LoadTextFile,
-    "SV-SaveTextFile": SaveTextFile,
-    "SV-BooleanNot": BooleanNot,
-    "SV-MathAddInt": MathAddInt,
-    "SV-MathCompare": MathCompare,
-    "SV-SigmaOneStep": SigmaOneStep,
-    "SV-SigmaRange": SigmaRange,
-    "SV-SigmaContinue": SigmaContinue,
-    "SV-SigmaContinueLinear": SigmaContinueLinear,
-    "SV-SigmaRemap": SigmaRemap,
-    "SV-SigmaConcat": SigmaConcat,
-    "SV-SigmaAsFloat": SigmaAsFloat,
-    "SV-SigmaLength": SigmaLength,
-    "SV-ModelName": ModelName,
-    "SV-PromptPlusModel": PromptPlusModel,
-    "SV-PromptPlusModelOutput": PromptPlusModelOutput,
-    "SV-CacheShield": CacheShield,
-    "SV-CacheShieldProxy": CacheShieldProxy,
-    "SV-HashModel": HashModel,
-    "SV-FlowManualCache": FlowManualCache,
-    "SV-FlowBlockSignal": FlowBlockSignal,
-    "SV-FlowBlock": FlowBlock,
-    "SV-FlowBlockSimple": FlowBlockSimple,
-    "SV-FlowContinue": FlowContinue,
-    "SV-FlowContinueSimple": FlowContinueSimple,
-    "SV-FlowNode": FlowNode,
-    "SV-CheckNone": CheckNone,
-    "SV-CheckNoneNot": CheckNoneNot,
-    "SV-DefaultInt": DefaultInt,
-    "SV-DefaultFloat": DefaultFloat,
-    "SV-DefaultString": DefaultString,
-    "SV-DefaultBoolean": DefaultBoolean,
-    "SV-DefaultValue": DefaultValue,
-    "SV-AnyToAny": AnyToAny,
-    "SV-ConsolePrint": ConsolePrint,
-    "SV-ConsolePrintMulti": ConsolePrintMulti,
-    "SV-AssertNotNone": AssertNotNone,
-    "SV-TimerStart": TimerStart,
-    "SV-TimerEnd": TimerEnd,
-    "SV-CurveFromEquation": CurveFromEquation,
-    "SV-ApplyCurve": ApplyCurve,
-    "SV-ApplyCurveFromStep": ApplyCurveFromStep,
-    "SV-FlowPipeInput": FlowPipeInput,
-    "SV-FlowPipeInputLarge": FlowPipeInputLarge,
-    "SV-FlowPipeInputIndex": FlowPipeInputIndex,
-    "SV-FlowPipeInputKey": FlowPipeInputKey,
-    "SV-FlowPipeInputKeyTuple": FlowPipeInputKeyTuple,
-    "SV-FlowPipeCombine": FlowPipeCombine,
-    "SV-FlowPipeOutput": FlowPipeOutput,
-    "SV-FlowPipeOutputLarge": FlowPipeOutputLarge,
-    "SV-FlowPipeOutputIndex": FlowPipeOutputIndex,
-    "SV-FlowPipeOutputKey": FlowPipeOutputKey,
-    "SV-FlowPipeOutputKeyTuple": FlowPipeOutputKeyTuple,
-    "SV-FloatRerouteForSubnodes": FloatRerouteForSubnodes,
-    "SV-ModelReroute": ModelReroute,
-    "SV-SigmaReroute": SigmaReroute,
-    "SV-ConditioningReroute": ConditioningReroute,
-    "SV-SwapValues": SwapValues
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "SV-SimpleText": "Simple Text",
-    "SV-PromptProcessing": "Prompt Processing",
-    "SV-PromptProcessingRecursive": "Recursive Processing",
-    "SV-PromptProcessingAdvanced": "Advanced Processing",
-    "SV-PromptProcessingEncode": "Encode Prompt",
-    "SV-ResolutionSelector": "Resolution Selector",
-    "SV-ResolutionSelector2": "Resolution Selector 2",
-    "SV-ResolutionSelector2Output": "Selector Output",
-    "SV-NormalizeImageSize": "Normalize Size",
-    "SV-NormalizeImageSize64": "Normalize Size (64)",
-    "SV-BasicParams": "Params",
-    "SV-BasicParamsPlus": "Params Plus",
-    "SV-BasicParamsCustom": "Params Custom",
-    "SV-BasicParamsOutput": "Params Output",
-    "SV-SamplerNameToSampler": "Sampler Converter",
-    "SV-StringSeparator": "String Separator",
-    "SV-LoraSeparator": "Lora Separator",
-    "SV-StringCombine": "String Combine",
-    "SV-InputSelect": "Input Select",
-    "SV-InputSelectBoolean": "Boolean Select",
-    "SV-LoadTextFile": "Load Text File",
-    "SV-SaveTextFile": "Save Text File",
-    "SV-BooleanNot": "Boolean Not",
-    "SV-MathAddInt": "Add Int",
-    "SV-MathCompare": "Compare",
-    "SV-SigmaOneStep": "Sigmas One Step",
-    "SV-SigmaRange": "Sigma Range",
-    "SV-SigmaContinue": "Sigma Continue",
-    "SV-SigmaContinueLinear": "Sigma Linear",
-    "SV-SigmaRemap": "Sigma Remap",
-    "SV-SigmaConcat": "Sigma Concat",
-    "SV-SigmaAsFloat": "Sigma As Float",
-    "SV-SigmaLength": "Sigma Length",
-    "SV-ModelName": "Model Name",
-    "SV-PromptPlusModel": "Prompt + Model",
-    "SV-PromptPlusModelOutput": "P+M Output",
-    "SV-CacheShield": "Cache Shield",
-    "SV-CacheShieldProxy": "Cache Proxy",
-    "SV-HashModel": "Hash Model",
-    "SV-FlowManualCache": "Manual Cache",
-    "SV-FlowBlockSignal": "Block Signal",
-    "SV-FlowBlock": "Flow Block",
-    "SV-FlowBlockSimple": "Simple Block",
-    "SV-FlowContinue": "Flow Continue",
-    "SV-FlowContinueSimple": "Simple Continue",
-    "SV-FlowNode": "Flow Node",
-    "SV-CheckNone": "Check None",
-    "SV-CheckNoneNot": "Check Not None",
-    "SV-DefaultInt": "Default Int",
-    "SV-DefaultFloat": "Default Float",
-    "SV-DefaultString": "Default String",
-    "SV-DefaultBoolean": "Default Boolean",
-    "SV-DefaultValue": "Default Value",
-    "SV-AnyToAny": "Any to Any",
-    "SV-ConsolePrint": "Console Print",
-    "SV-ConsolePrintMulti": "Console Print Multi",
-    "SV-AssertNotNone": "Assert Not None",
-    "SV-TimerStart": "Timer Start",
-    "SV-TimerEnd": "Timer End",
-    "SV-CurveFromEquation": "Curve from Equation",
-    "SV-ApplyCurve": "Apply Curve",
-    "SV-ApplyCurveFromStep": "Apply Curve from Step",
-    "SV-FlowPipeInput": "Pipe In",
-    "SV-FlowPipeInputLarge": "Pipe In Large",
-    "SV-FlowPipeInputIndex": "Pipe In Index",
-    "SV-FlowPipeInputKey": "Pipe In Key",
-    "SV-FlowPipeInputKeyTuple": "Pipe In Tuple",
-    "SV-FlowPipeCombine": "Pipe Combine",
-    "SV-FlowPipeOutput": "Pipe Out",
-    "SV-FlowPipeOutputLarge": "Pipe Out Large",
-    "SV-FlowPipeOutputIndex": "Pipe Out Index",
-    "SV-FlowPipeOutputKey": "Pipe Out Key",
-    "SV-FlowPipeOutputKeyTuple": "Pipe Out Tuple",
-    "SV-FloatRerouteForSubnodes": "Float",
-    "SV-ModelReroute": "Model Reroute",
-    "SV-SigmaReroute": "Sigmas Reroute",
-    "SV-ConditioningReroute": "Conditioning Reroute",
-    "SV-SwapValues": "Swap"
-}
+NODE_CLASS_MAPPINGS["SV-SwapValues"] = SwapValues
+NODE_DISPLAY_NAME_MAPPINGS["SV-SwapValues"] = "Swap"
 
 #-------------------------------------------------------------------------------#
+# Helper functions
 
 def approx_index(reference: list[float], value: float):
     if value > reference[0]:
