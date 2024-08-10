@@ -2055,10 +2055,10 @@ class FlowPipeInputModel:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "pipe": ("sv_pipe",),
                 "key": ("STRING", {"multiline": False, "default": ""}),
             },
             "optional": {
+                "pipe": ("sv_pipe",),
                 "model": ("MODEL",),
                 "clip": ("CLIP",),
                 "vae": ("VAE",),
@@ -2071,7 +2071,7 @@ class FlowPipeInputModel:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Pipes"
     
-    def run(self, pipe, key, model=None, clip=None, vae=None):
+    def run(self, key, pipe=None, model=None, clip=None, vae=None):
         if not isinstance(pipe, (dict, type(None))):
             raise TypeError("Invalid pipe input type")
         if pipe is None:
@@ -2130,10 +2130,10 @@ class FlowPipeInputParams:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "pipe": ("sv_pipe",),
                 "key": ("STRING", {"multiline": False, "default": ""}),
             },
             "optional": {
+                "pipe": ("sv_pipe",),
                 "positive": ("CONDITIONING",),
                 "negative": ("CONDITIONING",),
                 "latent": ("LATENT",),
@@ -2154,7 +2154,7 @@ class FlowPipeInputParams:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Pipes"
     
-    def run(self, pipe, key, positive=None, negative=None, latent=None, seed=None, params=None, cfg=None, steps=None, denoise=None, sampler=None, scheduler=None, ays=None):
+    def run(self, key, pipe=None, positive=None, negative=None, latent=None, seed=None, params=None, cfg=None, steps=None, denoise=None, sampler=None, scheduler=None, ays=None):
         if not isinstance(pipe, (dict, type(None))):
             raise TypeError("Invalid pipe input type")
         if pipe is None:
