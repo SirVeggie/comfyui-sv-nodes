@@ -10,6 +10,7 @@ import json
 import re
 import torch
 import sys
+from functools import partial
 
 class AnyType(str):
     def __eq__(self, __value: object) -> bool:
@@ -342,6 +343,32 @@ class NormalizeImageSize:
 
 #-------------------------------------------------------------------------------#
 
+class NormalizeImageSize64:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "width": ("INT", {"forceInput": True}),
+                "height": ("INT", {"forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("width", "height")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    def run(self, width, height):
+        width = math.floor(width / 64) * 64
+        height = math.floor(height / 64) * 64
+        return width, height
+
+#-------------------------------------------------------------------------------#
+
 class BasicParams:
     def __init__(self):
         pass
@@ -458,8 +485,8 @@ class BasicParamsOutput:
             }
         }
     
-    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES, "BOOLEAN")
-    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler", "ays")
+    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES, "BOOLEAN", "SAMPLER")
+    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler", "ays", "SAMPLER")
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Input"
@@ -473,10 +500,10 @@ class BasicParamsOutput:
         steps = packet[1] or 10
         denoise = packet[2] or 1.0
         sampler = packet[3] or comfy.samplers.SAMPLER_NAMES[0]
+        sampler2 = comfy.samplers.sampler_object(sampler)
         scheduler = comfy.samplers.SCHEDULER_NAMES[0] if packet[4] in [None, "ays"] else packet[4]
         ays = packet[5] or False
-        return cfg, steps, denoise, sampler, scheduler, ays
-
+        return cfg, steps, denoise, sampler, scheduler, ays, sampler2
 #-------------------------------------------------------------------------------#
 
 class SamplerNameToSampler:
@@ -1896,6 +1923,136 @@ class CheckNoneNot:
 
 #-------------------------------------------------------------------------------#
 
+class DefaultInt:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "default": ("INT", {"min": -sys.maxsize, "max": sys.maxsize, "step": 1, "default": 0})
+            }
+        }
+    
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("int",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any, default):
+        if any is None or not isinstance(any, int):
+            return (default,)
+        return (any,)
+
+#-------------------------------------------------------------------------------#
+
+class DefaultFloat:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "default": ("FLOAT", {"min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01, "default": 0.0})
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("float",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any, default):
+        if any is None or not isinstance(any, float):
+            return (default,)
+        return (any,)
+
+#-------------------------------------------------------------------------------#
+
+class DefaultString:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "default": ("STRING", {"multiline": False, "default": ""})
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("string",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any, default):
+        if any is None or not isinstance(any, str):
+            return (default,)
+        return (any,)
+
+#-------------------------------------------------------------------------------#
+
+class DefaultBoolean:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "default": ("BOOLEAN", {"default": False})
+            }
+        }
+    
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("bool",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any, default):
+        if any is None or not isinstance(any, bool):
+            return (default,)
+        return (any,)
+
+#-------------------------------------------------------------------------------#
+
+class DefaultValue:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (any_type,),
+                "default": (any_type,)
+            }
+        }
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("value",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, any, default):
+        if any is None:
+            return (default,)
+        return (any,)
+
+#-------------------------------------------------------------------------------#
+
 class AnyToAny:
     def __init__(self):
         pass
@@ -2049,6 +2206,140 @@ class TimerEnd:
 
 #-------------------------------------------------------------------------------#
 
+class CurveFromEquation:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "fn": ("STRING", {"multiline": False, "default": "x^2 + 1"})
+            }
+        }
+    
+    RETURN_TYPES = ("CURVE",)
+    RETURN_NAMES = ("curve",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, fn):
+        return (parseCurve(fn),)
+        
+def parseCurve(curve):
+    def f(curve, t):
+        curve = re.sub(r"\s+", "", curve)
+        curve = collapseSigns(curve)
+        while "(" in curve or ")" in curve:
+            curve = re.sub(r"\([^()]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
+            curve = collapseSigns(curve)
+        parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?=[-+])", curve))]
+        if len(parts) == 0:
+            raise ValueError("Invalid curve: No parts found")
+        sum = 0
+        for part in parts:
+            subparts = re.split(r"(?<=[*/])|(?=[*/])", part)
+            for i in range(len(subparts)):
+                if subparts[i] != "*" and subparts[i] != "/":
+                    subparts[i] = parseCurvePart(subparts[i], t)
+            for i in range(len(subparts)):
+                if subparts[i] == "*":
+                    subparts[i+1] = subparts[i-1] * subparts[i+1]
+                if subparts[i] == "/":
+                    subparts[i+1] = subparts[i-1] / subparts[i+1]
+            sum += subparts[-1]
+        return sum
+    return partial(f, curve)
+
+def collapseSigns(curve):
+    curve = re.sub(r"\+\+", "+", curve)
+    curve = re.sub(r"\-\-", "+", curve)
+    curve = re.sub(r"\+\-", "-", curve)
+    curve = re.sub(r"\-\+", "-", curve)
+    return curve
+
+def parseCurvePart(part, x):
+    if part == "+" or part == "-":
+        raise ValueError("Invalid curve: Operator without operand")
+    if "^" in part:
+        base, power = part.split("^")
+    else:
+        base = part
+        power = "1"
+    if power == "x" or power == "-x":
+        power = str(float(power.replace("x", "1")) * x)
+    elif "x" in power:
+        power = str(float(power.replace("x", "")) * x)
+    if not re.sub(r"[+-]", "", power).replace('.', '', 1).isdigit():
+        raise ValueError(f"Invalid curve: Power is invalid in {part}")
+    if re.sub(r"[+-]", "", base).replace('.', '', 1).isdigit():
+        return float(base) ** float(power)
+    if "x" not in base:
+        raise ValueError(f"Invalid curve: Base must contain 'x' in {part}")
+    base = base.replace("x", "")
+    if base == "" or base == "-":
+        base = base + "1"
+    multiplier = float(base)
+    return multiplier * (x ** float(power))
+
+#-------------------------------------------------------------------------------#
+
+class ApplyCurve:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "curve": ("CURVE",),
+                "t": ("FLOAT", {"forceInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("value",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, curve, t):
+        return (curve(t),)
+
+#-------------------------------------------------------------------------------#
+
+class ApplyCurveFromStep:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "curve": ("CURVE",),
+                "step": ("INT", {"forceInput": True}),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("value",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, curve, step, steps):
+        if step < 1 or step > steps:
+            raise ValueError("Invalid step value")
+        if steps < 1:
+            raise ValueError("Invalid steps value")
+        if steps == 1:
+            return (curve(1),)
+        return (curve((step - 1) / (steps - 1)),)
+
+#-------------------------------------------------------------------------------#
+
 class FloatRerouteForSubnodes:
     def __init__(self):
         pass
@@ -2178,6 +2469,7 @@ NODE_CLASS_MAPPINGS = {
     "SV-ResolutionSelector2": ResolutionSelector2,
     "SV-ResolutionSelector2Output": ResolutionSelector2Output,
     "SV-NormalizeImageSize": NormalizeImageSize,
+    "SV-NormalizeImageSize64": NormalizeImageSize64,
     "SV-BasicParams": BasicParams,
     "SV-BasicParamsPlus": BasicParamsPlus,
     "SV-BasicParamsCustom": BasicParamsCustom,
@@ -2216,12 +2508,20 @@ NODE_CLASS_MAPPINGS = {
     "SV-FlowNode": FlowNode,
     "SV-CheckNone": CheckNone,
     "SV-CheckNoneNot": CheckNoneNot,
+    "SV-DefaultInt": DefaultInt,
+    "SV-DefaultFloat": DefaultFloat,
+    "SV-DefaultString": DefaultString,
+    "SV-DefaultBoolean": DefaultBoolean,
+    "SV-DefaultValue": DefaultValue,
     "SV-AnyToAny": AnyToAny,
     "SV-ConsolePrint": ConsolePrint,
     "SV-ConsolePrintMulti": ConsolePrintMulti,
     "SV-AssertNotNone": AssertNotNone,
     "SV-TimerStart": TimerStart,
     "SV-TimerEnd": TimerEnd,
+    "SV-CurveFromEquation": CurveFromEquation,
+    "SV-ApplyCurve": ApplyCurve,
+    "SV-ApplyCurveFromStep": ApplyCurveFromStep,
     "SV-FlowPipeInput": FlowPipeInput,
     "SV-FlowPipeInputLarge": FlowPipeInputLarge,
     "SV-FlowPipeInputIndex": FlowPipeInputIndex,
@@ -2249,7 +2549,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-ResolutionSelector": "Resolution Selector",
     "SV-ResolutionSelector2": "Resolution Selector 2",
     "SV-ResolutionSelector2Output": "Selector Output",
-    "SV-NormalizeImageSize": "Normalize Image Size",
+    "SV-NormalizeImageSize": "Normalize Size",
+    "SV-NormalizeImageSize64": "Normalize Size (64)",
     "SV-BasicParams": "Params",
     "SV-BasicParamsPlus": "Params Plus",
     "SV-BasicParamsCustom": "Params Custom",
@@ -2288,12 +2589,20 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SV-FlowNode": "Flow Node",
     "SV-CheckNone": "Check None",
     "SV-CheckNoneNot": "Check Not None",
+    "SV-DefaultInt": "Default Int",
+    "SV-DefaultFloat": "Default Float",
+    "SV-DefaultString": "Default String",
+    "SV-DefaultBoolean": "Default Boolean",
+    "SV-DefaultValue": "Default Value",
     "SV-AnyToAny": "Any to Any",
     "SV-ConsolePrint": "Console Print",
     "SV-ConsolePrintMulti": "Console Print Multi",
     "SV-AssertNotNone": "Assert Not None",
     "SV-TimerStart": "Timer Start",
     "SV-TimerEnd": "Timer End",
+    "SV-CurveFromEquation": "Curve from Equation",
+    "SV-ApplyCurve": "Apply Curve",
+    "SV-ApplyCurveFromStep": "Apply Curve from Step",
     "SV-FlowPipeInput": "Pipe In",
     "SV-FlowPipeInputLarge": "Pipe In Large",
     "SV-FlowPipeInputIndex": "Pipe In Index",
