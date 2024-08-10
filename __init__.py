@@ -1118,6 +1118,30 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaConcat"] = "Sigma Concat"
 
 #-------------------------------------------------------------------------------#
 
+class SigmaEmpty:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {}
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self):
+        return (torch.FloatTensor([]).cpu(),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaEmpty"] = SigmaEmpty
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaEmpty"] = "Sigma Empty"
+
+#-------------------------------------------------------------------------------#
+
 class SigmaAsFloat:
     def __init__(self):
         pass
@@ -1664,6 +1688,39 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInput"] = "Pipe In"
 
 #-------------------------------------------------------------------------------#
 
+class FlowPipeOutput:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutput"] = FlowPipeOutput
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutput"] = "Pipe Out"
+
+#-------------------------------------------------------------------------------#
+
 class FlowPipeInputLarge:
     def __init__(self):
         pass
@@ -1730,6 +1787,39 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputLarge"] = "Pipe In Large"
 
 #-------------------------------------------------------------------------------#
 
+class FlowPipeOutputLarge:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type)
+    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_", "_6_", "_7_", "_8_", "_9_", "_10_")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None), pipe.get(f"_{5 + index}_", None), pipe.get(f"_{6 + index}_", None), pipe.get(f"_{7 + index}_", None), pipe.get(f"_{8 + index}_", None), pipe.get(f"_{9 + index}_", None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputLarge"] = FlowPipeOutputLarge
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputLarge"] = "Pipe Out Large"
+
+#-------------------------------------------------------------------------------#
+
 class FlowPipeInputIndex:
     def __init__(self):
         pass
@@ -1770,6 +1860,39 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputIndex"] = "Pipe In Index"
 
 #-------------------------------------------------------------------------------#
 
+class FlowPipeOutputIndex:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_NAMES = ("pipe", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, index):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(index, int):
+            raise TypeError("Invalid index input type")
+        if index < 1:
+            raise ValueError("Invalid index value")
+        return (pipe, pipe.get(f"_{index}_", None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputIndex"] = FlowPipeOutputIndex
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputIndex"] = "Pipe Out Index"
+
+#-------------------------------------------------------------------------------#
+
 class FlowPipeInputKey:
     def __init__(self):
         pass
@@ -1805,6 +1928,37 @@ class FlowPipeInputKey:
 
 NODE_CLASS_MAPPINGS["SV-FlowPipeInputKey"] = FlowPipeInputKey
 NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKey"] = "Pipe In Key"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputKey:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_NAMES = ("pipe", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        if not isinstance(key, str):
+            raise TypeError("Invalid key input type")
+        return (pipe, pipe.get(key, None))
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputKey"] = FlowPipeOutputKey
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKey"] = "Pipe Out Key"
 
 #-------------------------------------------------------------------------------#
 
@@ -1854,172 +2008,6 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKeyTuple"] = "Pipe In Tuple"
 
 #-------------------------------------------------------------------------------#
 
-class FlowPipeCombine:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "pipe1": ("sv_pipe",),
-                "pipe2": ("sv_pipe",),
-            }
-        }
-    
-    RETURN_TYPES = ("sv_pipe",)
-    RETURN_NAMES = ("pipe",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Pipes"
-    
-    def run(self, pipe1, pipe2):
-        if not isinstance(pipe1, (dict, type(None))) or not isinstance(pipe2, (dict, type(None))):
-            raise TypeError("Invalid pipe input type")
-        if pipe1 is None:
-            pipe1 = {}
-        if pipe2 is None:
-            pipe2 = {}
-        # remove None values
-        pipe1 = {k: v for k, v in pipe1.items() if v is not None}
-        pipe2 = {k: v for k, v in pipe2.items() if v is not None}
-        return ({**pipe1, **pipe2},)
-
-NODE_CLASS_MAPPINGS["SV-FlowPipeCombine"] = FlowPipeCombine
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeCombine"] = "Pipe Combine"
-
-#-------------------------------------------------------------------------------#
-
-class FlowPipeOutput:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "pipe": ("sv_pipe",),
-                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
-            }
-        }
-    
-    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
-    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Pipes"
-    
-    def run(self, pipe, index):
-        if not isinstance(pipe, dict):
-            raise TypeError("Invalid pipe input type")
-        if not isinstance(index, int):
-            raise TypeError("Invalid index input type")
-        if index < 1:
-            raise ValueError("Invalid index value")
-        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None))
-
-NODE_CLASS_MAPPINGS["SV-FlowPipeOutput"] = FlowPipeOutput
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutput"] = "Pipe Out"
-
-#-------------------------------------------------------------------------------#
-
-class FlowPipeOutputLarge:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "pipe": ("sv_pipe",),
-                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
-            }
-        }
-    
-    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type)
-    RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_", "_6_", "_7_", "_8_", "_9_", "_10_")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Pipes"
-    
-    def run(self, pipe, index):
-        if not isinstance(pipe, dict):
-            raise TypeError("Invalid pipe input type")
-        if not isinstance(index, int):
-            raise TypeError("Invalid index input type")
-        if index < 1:
-            raise ValueError("Invalid index value")
-        return (pipe, pipe.get(f"_{0 + index}_", None), pipe.get(f"_{1 + index}_", None), pipe.get(f"_{2 + index}_", None), pipe.get(f"_{3 + index}_", None), pipe.get(f"_{4 + index}_", None), pipe.get(f"_{5 + index}_", None), pipe.get(f"_{6 + index}_", None), pipe.get(f"_{7 + index}_", None), pipe.get(f"_{8 + index}_", None), pipe.get(f"_{9 + index}_", None))
-
-NODE_CLASS_MAPPINGS["SV-FlowPipeOutputLarge"] = FlowPipeOutputLarge
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputLarge"] = "Pipe Out Large"
-
-#-------------------------------------------------------------------------------#
-
-class FlowPipeOutputIndex:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "pipe": ("sv_pipe",),
-                "index": ("INT", {"min": 1, "max": 100, "step": 1, "default": 1}),
-            }
-        }
-    
-    RETURN_TYPES = ("sv_pipe", any_type)
-    RETURN_NAMES = ("pipe", "value")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Pipes"
-    
-    def run(self, pipe, index):
-        if not isinstance(pipe, dict):
-            raise TypeError("Invalid pipe input type")
-        if not isinstance(index, int):
-            raise TypeError("Invalid index input type")
-        if index < 1:
-            raise ValueError("Invalid index value")
-        return (pipe, pipe.get(f"_{index}_", None))
-
-NODE_CLASS_MAPPINGS["SV-FlowPipeOutputIndex"] = FlowPipeOutputIndex
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputIndex"] = "Pipe Out Index"
-
-#-------------------------------------------------------------------------------#
-
-class FlowPipeOutputKey:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "pipe": ("sv_pipe",),
-                "key": ("STRING", {"multiline": False}),
-            }
-        }
-    
-    RETURN_TYPES = ("sv_pipe", any_type)
-    RETURN_NAMES = ("pipe", "value")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Pipes"
-    
-    def run(self, pipe, key):
-        if not isinstance(pipe, dict):
-            raise TypeError("Invalid pipe input type")
-        if not isinstance(key, str):
-            raise TypeError("Invalid key input type")
-        return (pipe, pipe.get(key, None))
-
-NODE_CLASS_MAPPINGS["SV-FlowPipeOutputKey"] = FlowPipeOutputKey
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKey"] = "Pipe Out Key"
-
-#-------------------------------------------------------------------------------#
-
 class FlowPipeOutputKeyTuple:
     def __init__(self):
         pass
@@ -2056,6 +2044,209 @@ class FlowPipeOutputKeyTuple:
 
 NODE_CLASS_MAPPINGS["SV-FlowPipeOutputKeyTuple"] = FlowPipeOutputKeyTuple
 NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKeyTuple"] = "Pipe Out Tuple"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputModel:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False, "default": ""}),
+            },
+            "optional": {
+                "model": ("MODEL",),
+                "clip": ("CLIP",),
+                "vae": ("VAE",),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key, model=None, clip=None, vae=None):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if pipe is None:
+            pipe = {}
+        key = f"__model[{key}]__"
+        pipe[key] = (model, clip, vae)
+        return (pipe,)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputModel"] = FlowPipeInputModel
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputModel"] = "Pipe In Model"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputModel:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False, "default": ""}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", "MODEL", "CLIP", "VAE")
+    RETURN_NAMES = ("pipe", "model", "clip", "vae")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        key = f"__model[{key}]__"
+        value = pipe.get(key, None)
+        if value is None:
+            return (pipe, None, None, None)
+        if not isinstance(value, (tuple, list)):
+            raise ValueError("Invalid value type")
+        if len(value) != 3:
+            raise ValueError("Invalid value length")
+        return (pipe, *value)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputModel"] = FlowPipeOutputModel
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputModel"] = "Pipe Out Model"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeInputParams:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False, "default": ""}),
+            },
+            "optional": {
+                "positive": ("CONDITIONING",),
+                "negative": ("CONDITIONING",),
+                "latent": ("LATENT",),
+                "seed": ("INT", {"forceInput": True}),
+                "params": ("BP_OUTPUT",),
+                "cfg": ("FLOAT", {"forceInput": True}),
+                "steps": ("INT", {"forceInput": True}),
+                "denoise": ("FLOAT", {"forceInput": True}),
+                "sampler name": (comfy.samplers.SAMPLER_NAMES, {"forceInput": True}),
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES, {"forceInput": True}),
+                "ays": ("BOOLEAN", {"forceInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key, positive=None, negative=None, latent=None, seed=None, params=None, cfg=None, steps=None, denoise=None, sampler=None, scheduler=None, ays=None):
+        if not isinstance(pipe, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if pipe is None:
+            pipe = {}
+        key = f"__params[{key}]__"
+        if params is not None:
+            _cfg, _steps, _denoise, _sampler, _scheduler, _ays, _sampler2 = BasicParamsOutput.run(None, params)
+        _cfg = default(cfg, _cfg)
+        _steps = default(steps, _steps)
+        _denoise = default(denoise, _denoise)
+        _sampler = comfy.samplers.sampler_object(sampler) if sampler is not None else _sampler
+        _scheduler = comfy.samplers.scheduler_object(scheduler) if scheduler is not None else _scheduler
+        _ays = default(ays, _ays)
+        _sampler2 = comfy.samplers.sampler_object(sampler) if sampler is not None else _sampler2
+        pipe[key] = (positive, negative, latent, seed, _cfg, _steps, _denoise, _sampler, _sampler2, _scheduler, _ays)
+        return (pipe,)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeInputParams"] = FlowPipeInputParams
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputParams"] = "Pipe In Params"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeOutputParams:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe": ("sv_pipe",),
+                "key": ("STRING", {"multiline": False, "default": ""}),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe", "CONDITIONING", "CONDITIONING", "LATENT", "INT", "FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, "SAMPLER", comfy.samplers.SCHEDULER_NAMES, "BOOLEAN")
+    RETURN_NAMES = ("pipe", "positive", "negative", "latent", "seed", "cfg", "steps", "denoise", "sampler name", "sampler", "scheduler", "ays")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe, key):
+        if not isinstance(pipe, dict):
+            raise TypeError("Invalid pipe input type")
+        key = f"__params[{key}]__"
+        value = pipe.get(key, None)
+        if value is None:
+            return (pipe, None, None, None, None, None, None, None, None, None, None, None)
+        if not isinstance(value, (tuple, list)):
+            raise ValueError("Invalid value type")
+        if len(value) != 11:
+            raise ValueError("Invalid value length")
+        return (pipe, *value)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeOutputParams"] = FlowPipeOutputParams
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputParams"] = "Pipe Out Params"
+
+#-------------------------------------------------------------------------------#
+
+class FlowPipeCombine:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipe1": ("sv_pipe",),
+                "pipe2": ("sv_pipe",),
+            }
+        }
+    
+    RETURN_TYPES = ("sv_pipe",)
+    RETURN_NAMES = ("pipe",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Pipes"
+    
+    def run(self, pipe1, pipe2):
+        if not isinstance(pipe1, (dict, type(None))) or not isinstance(pipe2, (dict, type(None))):
+            raise TypeError("Invalid pipe input type")
+        if pipe1 is None:
+            pipe1 = {}
+        if pipe2 is None:
+            pipe2 = {}
+        # remove None values
+        pipe1 = {k: v for k, v in pipe1.items() if v is not None}
+        pipe2 = {k: v for k, v in pipe2.items() if v is not None}
+        return ({**pipe1, **pipe2},)
+
+NODE_CLASS_MAPPINGS["SV-FlowPipeCombine"] = FlowPipeCombine
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeCombine"] = "Pipe Combine"
 
 #-------------------------------------------------------------------------------#
 
@@ -2704,6 +2895,16 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-SwapValues"] = "Swap"
 
 #-------------------------------------------------------------------------------#
 # Helper functions
+
+def default(value, *args):
+    if value is not None:
+        return value
+    for arg in args:
+        if arg is not None:
+            return arg
+    return None
+
+#-------------------------------------------------------------------------------#
 
 def approx_index(reference: list[float], value: float):
     if value > reference[0]:
