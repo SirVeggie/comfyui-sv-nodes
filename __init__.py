@@ -2077,6 +2077,10 @@ class FlowPipeInputModel:
         if pipe is None:
             pipe = {}
         key = f"__model[{key}]__"
+        old = pipe.get(key, (None, None, None))
+        model = model if model is not None else old[0]
+        clip = clip if clip is not None else old[1]
+        vae = vae if vae is not None else old[2]
         pipe[key] = (model, clip, vae)
         return (pipe,)
 
@@ -2160,6 +2164,7 @@ class FlowPipeInputParams:
         if pipe is None:
             pipe = {}
         key = f"__params[{key}]__"
+        _cfg, _steps, _denoise, _sampler, _scheduler, _ays, _sampler2 = None, None, None, None, None, None, None
         if params is not None:
             _cfg, _steps, _denoise, _sampler, _scheduler, _ays, _sampler2 = BasicParamsOutput.run(None, params)
         _cfg = default(cfg, _cfg)
@@ -2169,7 +2174,21 @@ class FlowPipeInputParams:
         _scheduler = comfy.samplers.scheduler_object(scheduler) if scheduler is not None else _scheduler
         _ays = default(ays, _ays)
         _sampler2 = comfy.samplers.sampler_object(sampler) if sampler is not None else _sampler2
-        pipe[key] = (positive, negative, latent, seed, _cfg, _steps, _denoise, _sampler, _sampler2, _scheduler, _ays)
+        
+        old = pipe.get(key, (None, None, None, None, None, None, None, None, None, None, None))
+        positive = positive if positive is not None else old[0]
+        negative = negative if negative is not None else old[1]
+        latent = latent if latent is not None else old[2]
+        seed = seed if seed is not None else old[3]
+        cfg = _cfg if _cfg is not None else old[4]
+        steps = _steps if _steps is not None else old[5]
+        denoise = _denoise if _denoise is not None else old[6]
+        sampler = _sampler if _sampler is not None else old[7]
+        sampler2 = _sampler2 if _sampler2 is not None else old[8]
+        scheduler = _scheduler if _scheduler is not None else old[9]
+        ays = _ays if _ays is not None else old[10]
+        
+        pipe[key] = (positive, negative, latent, seed, cfg, steps, denoise, sampler, sampler2, scheduler, ays)
         return (pipe,)
 
 NODE_CLASS_MAPPINGS["SV-FlowPipeInputParams"] = FlowPipeInputParams
@@ -3254,7 +3273,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                     raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
                 parts = []
                 weights = []
-                if colons == 2:
+                if colons == 2 and text[splits[1][0]+1:end].replace(".", "", 1).isdigit():
                     parts.append(text[start+1:splits[0][0]])
                     parts.append(text[splits[0][0]+1:splits[1][0]])
                     weight = text[splits[1][0]+1:end]
