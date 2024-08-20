@@ -11,6 +11,8 @@ import re
 import torch
 import sys
 from functools import partial
+from comfy_execution.graph_utils import GraphBuilder, is_link
+from comfy_execution.graph import ExecutionBlocker
 
 #-------------------------------------------------------------------------------#
 # Helper classes
@@ -22,6 +24,58 @@ class AnyType(str):
         return False
 
 any_type = AnyType("*")
+
+def MakeSmartType(t):
+    if isinstance(t, str):
+        return SmartType(t)
+    return t
+
+class SmartType(str):
+    def __ne__(self, other):
+        if self == "*" or other == "*":
+            return False
+        selfset = set(self.split(','))
+        otherset = set(other.split(','))
+        return not selfset.issubset(otherset)
+
+def VariantSupport():
+    def decorator(cls):
+        if hasattr(cls, "INPUT_TYPES"):
+            old_input_types = getattr(cls, "INPUT_TYPES")
+            def new_input_types(*args, **kwargs):
+                types = old_input_types(*args, **kwargs)
+                for category in ["required", "optional"]:
+                    if category not in types:
+                        continue
+                    for key, value in types[category].items():
+                        if isinstance(value, tuple):
+                            types[category][key] = (MakeSmartType(value[0]),) + value[1:]
+                return types
+            setattr(cls, "INPUT_TYPES", new_input_types)
+        if hasattr(cls, "RETURN_TYPES"):
+            old_return_types = cls.RETURN_TYPES
+            setattr(cls, "RETURN_TYPES", tuple(MakeSmartType(x) for x in old_return_types))
+        if hasattr(cls, "VALIDATE_INPUTS"):
+            # Reflection is used to determine what the function signature is, so we can't just change the function signature
+            raise NotImplementedError("VariantSupport does not support VALIDATE_INPUTS yet")
+        else:
+            def validate_inputs(input_types):
+                inputs = cls.INPUT_TYPES()
+                for key, value in input_types.items():
+                    if isinstance(value, SmartType):
+                        continue
+                    if "required" in inputs and key in inputs["required"]:
+                        expected_type = inputs["required"][key][0]
+                    elif "optional" in inputs and key in inputs["optional"]:
+                        expected_type = inputs["optional"][key][0]
+                    else:
+                        expected_type = None
+                    if expected_type is not None and MakeSmartType(value) != expected_type:
+                        return f"Invalid type of {key}: {value} (expected {expected_type})"
+                return True
+            setattr(cls, "VALIDATE_INPUTS", validate_inputs)
+        return cls
+    return decorator
 
 #-------------------------------------------------------------------------------#
 # Mappings
@@ -684,81 +738,6 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-StringCombine"] = "String Combine"
 
 #-------------------------------------------------------------------------------#
 
-class InputSelect:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "select": ("INT", {"min": 1, "max": 5, "step": 1}),
-            },
-            "optional": {
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,),
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("out",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, select, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
-        if select == 1:
-            return (_1_,)
-        if select == 2:
-            return (_2_,)
-        if select == 3:
-            return (_3_,)
-        if select == 4:
-            return (_4_,)
-        if select == 5:
-            return (_5_,)
-        return (None,)
-
-NODE_CLASS_MAPPINGS["SV-InputSelect"] = InputSelect
-NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelect"] = "Input Select"
-
-#-------------------------------------------------------------------------------#
-
-class InputSelectBoolean:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "select": ("BOOLEAN",),
-            },
-            "optional": {
-                "on": (any_type,),
-                "off": (any_type,)
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("out",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, select, on=None, off=None):
-        if select:
-            return (on,)
-        return (off,)
-
-NODE_CLASS_MAPPINGS["SV-InputSelectBoolean"] = InputSelectBoolean
-NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelectBoolean"] = "Boolean Select"
-
-#-------------------------------------------------------------------------------#
-
 class LoadTextFile:
     def __init__(self):
         pass
@@ -1292,6 +1271,166 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-PromptPlusModelOutput"] = "P+M Output"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
+class InputSelect:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "select": ("INT", {"min": 1, "max": 5, "step": 1, "default": 1}),
+            },
+            "optional": {
+                "_1_": ("*", {"lazy": True}),
+                "_2_": ("*", {"lazy": True}),
+                "_3_": ("*", {"lazy": True}),
+                "_4_": ("*", {"lazy": True}),
+                "_5_": ("*", {"lazy": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("out",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, select, **kwargs):
+        if select == 1:
+            return ["_1_"]
+        if select == 2:
+            return ["_2_"]
+        if select == 3:
+            return ["_3_"]
+        if select == 4:
+            return ["_4_"]
+        if select == 5:
+            return ["_5_"]
+        return []
+    
+    def run(self, select, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
+        if select == 1:
+            return (_1_,)
+        if select == 2:
+            return (_2_,)
+        if select == 3:
+            return (_3_,)
+        if select == 4:
+            return (_4_,)
+        if select == 5:
+            return (_5_,)
+        return (None,)
+
+NODE_CLASS_MAPPINGS["SV-InputSelect"] = InputSelect
+NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelect"] = "Input Select"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class InputSelectBoolean:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "select": ("BOOLEAN",),
+            },
+            "optional": {
+                "on": ("*", {"lazy": True}),
+                "off": ("*", {"lazy": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("out",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, select, **kwargs):
+        if select:
+            return ["on"]
+        return ["off"]
+    
+    def run(self, select, on=None, off=None):
+        if select:
+            return (on,)
+        return (off,)
+
+NODE_CLASS_MAPPINGS["SV-InputSelectBoolean"] = InputSelectBoolean
+NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelectBoolean"] = "Boolean Select"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class FlowBlocker:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "input": ("*", {"lazy": True}),
+                "block": ("BOOLEAN",),
+            },
+        }
+
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("output",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, block, input=None):
+        if not block:
+            return ["input"]
+        return []
+
+    def run(self, input, block):
+        if block:
+            return (ExecutionBlocker(None),)
+        return (input,)
+
+NODE_CLASS_MAPPINGS["SV-FlowBlocker"] = FlowBlocker
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlocker"] = "Blocker"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class IfBranch:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "input": ("*",),
+                "condition": ("BOOLEAN",),
+            }
+        }
+    
+    RETURN_TYPES = ("*", "*")
+    RETURN_NAMES = ("if", "else")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, input, condition):
+        if condition:
+            return (input, ExecutionBlocker(None))
+        return (ExecutionBlocker(None), input)
+
+NODE_CLASS_MAPPINGS["SV-IfBranch"] = IfBranch
+NODE_DISPLAY_NAME_MAPPINGS["SV-IfBranch"] = "If Branch"
+
+#-------------------------------------------------------------------------------#
+
 class CacheShield:
     def __init__(self):
         pass
@@ -1437,171 +1576,6 @@ class FlowManualCache:
 
 NODE_CLASS_MAPPINGS["SV-FlowManualCache"] = FlowManualCache
 NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
-
-#-------------------------------------------------------------------------------#
-
-class FlowBlockSignal:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "enabled": ("BOOLEAN", {"default": False}),
-            }
-        }
-    
-    RETURN_TYPES = ("bsignal",)
-    RETURN_NAMES = ("signal",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, enabled):
-        return (None,)
-    
-    @classmethod
-    def IS_CONTROLLED(s, enabled):
-        if enabled:
-            return "blocked"
-        return None
-
-NODE_CLASS_MAPPINGS["SV-FlowBlockSignal"] = FlowBlockSignal
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlockSignal"] = "Block Signal"
-
-#-------------------------------------------------------------------------------#
-
-class FlowBlock:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "signal": ("bsignal",),
-                "any": (any_type,),
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("any",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, signal, any):
-        return (any,)
-
-NODE_CLASS_MAPPINGS["SV-FlowBlock"] = FlowBlock
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlock"] = "Flow Block"
-
-#-------------------------------------------------------------------------------#
-
-class FlowBlockSimple:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "any": (any_type,),
-                "enabled": ("BOOLEAN", {"default": False, "label_on": "block", "label_off": "allow"}),
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("any",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, any, enabled):
-        return (any,)
-    
-    @classmethod
-    def IS_CONTROLLED(s, any, enabled):
-        if enabled:
-            return "blocked"
-        return None
-
-NODE_CLASS_MAPPINGS["SV-FlowBlockSimple"] = FlowBlockSimple
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlockSimple"] = "Simple Block"
-
-#-------------------------------------------------------------------------------#
-# Strongly referencing rgthree's any switch
-
-def is_none(value):
-    if value is not None:
-        if isinstance(value, dict) and 'model' in value and 'clip' in value:
-            return is_context_empty(value)
-    return value is None
-def is_context_empty(ctx):
-    return not ctx or all(v is None for v in ctx.values())
-
-class FlowContinue:
-    CONTINUE = True
-    
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {},
-            "optional": {
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,),
-            }
-        }
-    
-    RETURN_TYPES = (any_type, "INT")
-    RETURN_NAMES = ("any", "index")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, **kwargs):
-        for key, value in kwargs.items():
-            if key.startswith("_") and key.endswith("_") and not is_none(value):
-                return (value, parse_index(key))
-        return (None, 0)
-
-NODE_CLASS_MAPPINGS["SV-FlowContinue"] = FlowContinue
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowContinue"] = "Flow Continue"
-
-#-------------------------------------------------------------------------------#
-
-class FlowContinueSimple:
-    CONTINUE = True
-    
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "any": (any_type,),
-            }
-        }
-    
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("any",)
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, any):
-        return (any,)
-
-NODE_CLASS_MAPPINGS["SV-FlowContinueSimple"] = FlowContinueSimple
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowContinueSimple"] = "Simple Continue"
 
 #-------------------------------------------------------------------------------#
 
