@@ -281,6 +281,75 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingEncode"] = "Encode Prompt"
 
 #-------------------------------------------------------------------------------#
 
+class PromptProcessingEncodeList:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "clip": ("CLIP",),
+                "prompt": ("sv_prompt",),
+            }
+        }
+    
+    RETURN_TYPES = ("cond_list",)
+    RETURN_NAMES = ("conds",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, clip, prompt):
+        steps = len(prompt)
+        cache = {}
+        conds = []
+        
+        for i in range(1, steps + 1):
+            pos, neg = prompt[i - 1]
+            
+            if pos not in cache:
+                cache[pos] = encode(clip, pos)
+            pcond = cache[pos]
+            if neg not in cache:
+                cache[neg] = encode(clip, neg)
+            ncond = cache[neg]
+            conds.append((pcond, ncond))
+        
+        return (conds,)
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingEncodeList"] = PromptProcessingEncodeList
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingEncodeList"] = "Encode Prompt List"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingGetCond:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "conds": ("cond_list",),
+                "step": ("INT", {"defaultInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("positive", "negative")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, conds, step):
+        return conds[step - 1]
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingGetCond"] = PromptProcessingGetCond
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingGetCond"] = "Get Conditioning"
+
+#-------------------------------------------------------------------------------#
+
 class ResolutionSelector:
     RATIOS = ["1:1", "5:4", "4:3", "3:2", "16:9", "21:9"]
     
@@ -1431,6 +1500,548 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-IfBranch"] = "If Branch"
 
 #-------------------------------------------------------------------------------#
 
+NUM_FLOW_SOCKETS = 4
+
+@VariantSupport()
+class ForLoopOpen:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "remaining": ("INT", {"default": 1, "min": 0, "max": 100000, "step": 1}),
+            },
+            "optional": {
+                "initial_value%d" % i: ("*",) for i in range(1, NUM_FLOW_SOCKETS)
+            },
+            "hidden": {
+                "initial_value0": ("*",)
+            }
+        }
+
+    RETURN_TYPES = tuple(["FLOW_CONTROL", "INT",] + ["*"] * (NUM_FLOW_SOCKETS-1))
+    RETURN_NAMES = tuple(["flow_control", "remaining"] + ["value%d" % i for i in range(1, NUM_FLOW_SOCKETS)])
+    FUNCTION = "for_loop_open"
+
+    CATEGORY = "InversionDemo Nodes/Flow"
+
+    def for_loop_open(self, remaining, **kwargs):
+        graph = GraphBuilder()
+        if "initial_value0" in kwargs:
+            remaining = kwargs["initial_value0"]
+        while_open = graph.node("SV-WhileLoopOpen", condition=remaining, initial_value0=remaining, **{("initial_value%d" % i): kwargs.get("initial_value%d" % i, None) for i in range(1, NUM_FLOW_SOCKETS)})
+        outputs = [kwargs.get("initial_value%d" % i, None) for i in range(1, NUM_FLOW_SOCKETS)]
+        return {
+            "result": tuple(["stub", remaining] + outputs),
+            "expand": graph.finalize(),
+        }
+
+NODE_CLASS_MAPPINGS["SV-ForLoopOpen"] = ForLoopOpen
+NODE_DISPLAY_NAME_MAPPINGS["SV-ForLoopOpen"] = "For Loop Open"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ForLoopClose:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "flow_control": ("FLOW_CONTROL", {"rawLink": True}),
+            },
+            "optional": {
+                "initial_value%d" % i: ("*",{"rawLink": True}) for i in range(1, NUM_FLOW_SOCKETS)
+            },
+        }
+
+    RETURN_TYPES = tuple(["*"] * (NUM_FLOW_SOCKETS-1))
+    RETURN_NAMES = tuple(["value%d" % i for i in range(1, NUM_FLOW_SOCKETS)])
+    FUNCTION = "for_loop_close"
+
+    CATEGORY = "InversionDemo Nodes/Flow"
+
+    def for_loop_close(self, flow_control, **kwargs):
+        graph = GraphBuilder()
+        while_open = flow_control[0]
+        # TODO - Requires WAS-ns. Will definitely want to solve before merging
+        sub = graph.node("SV-IntMathOperation", operation="subtract", a=[while_open,1], b=1)
+        cond = graph.node("SV-ToBoolNode", value=sub.out(0))
+        input_values = {("initial_value%d" % i): kwargs.get("initial_value%d" % i, None) for i in range(1, NUM_FLOW_SOCKETS)}
+        while_close = graph.node("SV-WhileLoopClose",
+                flow_control=flow_control,
+                condition=cond.out(0),
+                initial_value0=sub.out(0),
+                **input_values)
+        return {
+            "result": tuple([while_close.out(i) for i in range(1, NUM_FLOW_SOCKETS)]),
+            "expand": graph.finalize(),
+        }
+
+NODE_CLASS_MAPPINGS["SV-ForLoopClose"] = ForLoopClose
+NODE_DISPLAY_NAME_MAPPINGS["SV-ForLoopClose"] = "For Loop Close"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class WhileLoopOpen:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = {
+            "required": {
+                "condition": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+            },
+        }
+        for i in range(NUM_FLOW_SOCKETS):
+            inputs["optional"]["initial_value%d" % i] = ("*",)
+        return inputs
+
+    RETURN_TYPES = tuple(["FLOW_CONTROL"] + ["*"] * NUM_FLOW_SOCKETS)
+    RETURN_NAMES = tuple(["FLOW_CONTROL"] + ["value%d" % i for i in range(NUM_FLOW_SOCKETS)])
+    FUNCTION = "while_loop_open"
+
+    CATEGORY = "InversionDemo Nodes/Flow"
+
+    def while_loop_open(self, condition, **kwargs):
+        values = []
+        for i in range(NUM_FLOW_SOCKETS):
+            values.append(kwargs.get("initial_value%d" % i, None))
+        return tuple(["stub"] + values)
+
+NODE_CLASS_MAPPINGS["SV-WhileLoopOpen"] = WhileLoopOpen
+NODE_DISPLAY_NAME_MAPPINGS["SV-WhileLoopOpen"] = "While Loop Open"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class WhileLoopClose:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = {
+            "required": {
+                "flow_control": ("FLOW_CONTROL", {"rawLink": True}),
+                "condition": ("BOOLEAN", {"forceInput": True}),
+            },
+            "optional": {
+            },
+            "hidden": {
+                "dynprompt": "DYNPROMPT",
+                "unique_id": "UNIQUE_ID",
+            }
+        }
+        for i in range(NUM_FLOW_SOCKETS):
+            inputs["optional"]["initial_value%d" % i] = ("*",)
+        return inputs
+
+    RETURN_TYPES = tuple(["*"] * NUM_FLOW_SOCKETS)
+    RETURN_NAMES = tuple(["value%d" % i for i in range(NUM_FLOW_SOCKETS)])
+    FUNCTION = "while_loop_close"
+
+    CATEGORY = "InversionDemo Nodes/Flow"
+
+    def explore_dependencies(self, node_id, dynprompt, upstream):
+        node_info = dynprompt.get_node(node_id)
+        if "inputs" not in node_info:
+            return
+        for k, v in node_info["inputs"].items():
+            if is_link(v):
+                parent_id = v[0]
+                if parent_id not in upstream:
+                    upstream[parent_id] = []
+                    self.explore_dependencies(parent_id, dynprompt, upstream)
+                upstream[parent_id].append(node_id)
+
+    def collect_contained(self, node_id, upstream, contained):
+        if node_id not in upstream:
+            return
+        for child_id in upstream[node_id]:
+            if child_id not in contained:
+                contained[child_id] = True
+                self.collect_contained(child_id, upstream, contained)
+
+
+    def while_loop_close(self, flow_control, condition, dynprompt=None, unique_id=None, **kwargs):
+        if not condition:
+            # We're done with the loop
+            values = []
+            for i in range(NUM_FLOW_SOCKETS):
+                values.append(kwargs.get("initial_value%d" % i, None))
+            return tuple(values)
+
+        # We want to loop
+        this_node = dynprompt.get_node(unique_id)
+        upstream = {}
+        # Get the list of all nodes between the open and close nodes
+        self.explore_dependencies(unique_id, dynprompt, upstream)
+
+        contained = {}
+        open_node = flow_control[0]
+        self.collect_contained(open_node, upstream, contained)
+        contained[unique_id] = True
+        contained[open_node] = True
+
+        # We'll use the default prefix, but to avoid having node names grow exponentially in size,
+        # we'll use "Recurse" for the name of the recursively-generated copy of this node.
+        graph = GraphBuilder()
+        for node_id in contained:
+            original_node = dynprompt.get_node(node_id)
+            node = graph.node(original_node["class_type"], "Recurse" if node_id == unique_id else node_id)
+            node.set_override_display_id(node_id)
+        for node_id in contained:
+            original_node = dynprompt.get_node(node_id)
+            node = graph.lookup_node("Recurse" if node_id == unique_id else node_id)
+            for k, v in original_node["inputs"].items():
+                if is_link(v) and v[0] in contained:
+                    parent = graph.lookup_node(v[0])
+                    node.set_input(k, parent.out(v[1]))
+                else:
+                    node.set_input(k, v)
+        new_open = graph.lookup_node(open_node)
+        for i in range(NUM_FLOW_SOCKETS):
+            key = "initial_value%d" % i
+            new_open.set_input(key, kwargs.get(key, None))
+        my_clone = graph.lookup_node("Recurse" )
+        result = map(lambda x: my_clone.out(x), range(NUM_FLOW_SOCKETS))
+        return {
+            "result": tuple(result),
+            "expand": graph.finalize(),
+        }
+
+NODE_CLASS_MAPPINGS["SV-WhileLoopClose"] = WhileLoopClose
+NODE_DISPLAY_NAME_MAPPINGS["SV-WhileLoopClose"] = "While Loop Close"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class IntMathOperation:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "a": ("INT", {"default": 0, "min": -0xffffffffffffffff, "max": 0xffffffffffffffff, "step": 1}),
+                "b": ("INT", {"default": 0, "min": -0xffffffffffffffff, "max": 0xffffffffffffffff, "step": 1}),
+                "operation": (["add", "subtract", "multiply", "divide", "modulo", "power"],),
+            },
+        }
+
+    RETURN_TYPES = ("INT",)
+    FUNCTION = "int_math_operation"
+
+    CATEGORY = "InversionDemo Nodes/Logic"
+
+    def int_math_operation(self, a, b, operation):
+        if operation == "add":
+            return (a + b,)
+        elif operation == "subtract":
+            return (a - b,)
+        elif operation == "multiply":
+            return (a * b,)
+        elif operation == "divide":
+            return (a // b,)
+        elif operation == "modulo":
+            return (a % b,)
+        elif operation == "power":
+            return (a ** b,)
+
+NODE_CLASS_MAPPINGS["SV-IntMathOperation"] = IntMathOperation
+NODE_DISPLAY_NAME_MAPPINGS["SV-IntMathOperation"] = "Int Math Operation"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ToBoolNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "value": ("*",),
+            },
+            "optional": {
+                "invert": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("BOOLEAN",)
+    FUNCTION = "to_bool"
+
+    CATEGORY = "InversionDemo Nodes/Logic"
+
+    def to_bool(self, value, invert = False):
+        if isinstance(value, torch.Tensor):
+            if value.max().item() == 0 and value.min().item() == 0:
+                result = False
+            else:
+                result = True
+        else:
+            try:
+                result = bool(value)
+            except:
+                # Can't convert it? Well then it's something or other. I dunno, I'm not a Python programmer.
+                result = True
+
+        if invert:
+            result = not result
+
+        return (result,)
+
+NODE_CLASS_MAPPINGS["SV-ToBoolNode"] = ToBoolNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-ToBoolNode"] = "To Bool"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class AccumulateNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "to_add": ("*",),
+            },
+            "optional": {
+                "accumulation": ("ACCUMULATION",),
+            },
+        }
+
+    RETURN_TYPES = ("ACCUMULATION",)
+    FUNCTION = "accumulate"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def accumulate(self, to_add, accumulation = None):
+        if accumulation is None:
+            value = [to_add]
+        else:
+            value = accumulation["accum"] + [to_add]
+        return ({"accum": value},)
+
+NODE_CLASS_MAPPINGS["SV-AccumulateNode"] = AccumulateNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulateNode"] = "Accumulate"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class AccumulationHeadNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+            },
+        }
+
+    RETURN_TYPES = ("ACCUMULATION", "*",)
+    FUNCTION = "accumulation_head"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def accumulation_head(self, accumulation):
+        accum = accumulation["accum"]
+        if len(accum) == 0:
+            return (accumulation, None)
+        else:
+            return ({"accum": accum[1:]}, accum[0])
+
+NODE_CLASS_MAPPINGS["SV-AccumulationHeadNode"] = AccumulationHeadNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationHeadNode"] = "Accumulation Head"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class AccumulationTailNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+            },
+        }
+
+    RETURN_TYPES = ("ACCUMULATION", "*",)
+    FUNCTION = "accumulation_tail"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def accumulation_tail(self, accumulation):
+        accum = accumulation["accum"]
+        if len(accum) == 0:
+            return (None, accumulation)
+        else:
+            return ({"accum": accum[:-1]}, accum[-1])
+
+NODE_CLASS_MAPPINGS["SV-AccumulationTailNode"] = AccumulationTailNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationTailNode"] = "Accumulation Tail"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class AccumulationToListNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+            },
+        }
+
+    RETURN_TYPES = ("*",)
+    OUTPUT_IS_LIST = (True,)
+
+    FUNCTION = "accumulation_to_list"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def accumulation_to_list(self, accumulation):
+        return (accumulation["accum"],)
+
+NODE_CLASS_MAPPINGS["SV-AccumulationToListNode"] = AccumulationToListNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationToListNode"] = "Accumulation To List"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ListToAccumulationNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "list": ("*",),
+            },
+        }
+
+    RETURN_TYPES = ("ACCUMULATION",)
+    INPUT_IS_LIST = (True,)
+
+    FUNCTION = "list_to_accumulation"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def list_to_accumulation(self, list):
+        return ({"accum": list},)
+
+NODE_CLASS_MAPPINGS["SV-ListToAccumulationNode"] = ListToAccumulationNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-ListToAccumulationNode"] = "List To Accumulation"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class AccumulationGetLengthNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+            },
+        }
+
+    RETURN_TYPES = ("INT",)
+
+    FUNCTION = "accumlength"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def accumlength(self, accumulation):
+        return (len(accumulation['accum']),)
+
+NODE_CLASS_MAPPINGS["SV-AccumulationGetLengthNode"] = AccumulationGetLengthNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationGetLengthNode"] = "Accumulation Get Length"
+
+#-------------------------------------------------------------------------------#
+        
+@VariantSupport()
+class AccumulationGetItemNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+                "index": ("INT", {"default":0, "step":1})
+            },
+        }
+
+    RETURN_TYPES = ("*",)
+
+    FUNCTION = "get_item"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def get_item(self, accumulation, index):
+        return (accumulation['accum'][index],)
+
+NODE_CLASS_MAPPINGS["SV-AccumulationGetItemNode"] = AccumulationGetItemNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationGetItemNode"] = "Accumulation Get Item"
+
+#-------------------------------------------------------------------------------#
+        
+@VariantSupport()
+class AccumulationSetItemNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "accumulation": ("ACCUMULATION",),
+                "index": ("INT", {"default":0, "step":1}),
+                "value": ("*",),
+            },
+        }
+
+    RETURN_TYPES = ("ACCUMULATION",)
+
+    FUNCTION = "set_item"
+
+    CATEGORY = "InversionDemo Nodes/Lists"
+
+    def set_item(self, accumulation, index, value):
+        new_accum = accumulation['accum'][:]
+        new_accum[index] = value
+        return ({"accum": new_accum},)
+
+NODE_CLASS_MAPPINGS["SV-AccumulationSetItemNode"] = AccumulationSetItemNode
+NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationSetItemNode"] = "Accumulation Set Item"
+
+#-------------------------------------------------------------------------------#
+
 class CacheShield:
     def __init__(self):
         pass
@@ -2525,6 +3136,40 @@ class ConsolePrintMulti:
 
 NODE_CLASS_MAPPINGS["SV-ConsolePrintMulti"] = ConsolePrintMulti
 NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrintMulti"] = "Console Print Multi"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ConsolePrintLoop:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True}),
+            },
+            "optional": {
+                "signal1": ("*",),
+                "signal2": ("*",),
+                "signal3": ("*",),
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ("*", "*", "*")
+    RETURN_NAMES = ("signal1", "signal2", "signal3")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Debug"
+    
+    def run(self, text, signal1=None, signal2=None, signal3=None):
+        print(text.replace("_signal1_", str(signal1)).replace("_signal2_", str(signal2)).replace("_signal3_", str(signal3)))
+        return (signal1, signal2, signal3)
+
+NODE_CLASS_MAPPINGS["SV-ConsolePrintLoop"] = ConsolePrintLoop
+NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrintLoop"] = "Console Print Loop"
 
 #-------------------------------------------------------------------------------#
 
