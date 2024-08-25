@@ -18,14 +18,6 @@ from comfy_execution.graph import ExecutionBlocker
 #-------------------------------------------------------------------------------#
 # Helper classes
 
-class AnyType(str):
-    def __eq__(self, __value: object) -> bool:
-        return True
-    def __ne__(self, __value: object) -> bool:
-        return False
-
-any_type = AnyType("*")
-
 def MakeSmartType(t):
     if isinstance(t, str):
         return SmartType(t)
@@ -1245,6 +1237,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaLength"] = "Sigma Length"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class ModelName:
     def __init__(self):
         pass
@@ -1257,7 +1250,7 @@ class ModelName:
             }
         }
     
-    RETURN_TYPES = (any_type,)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("model name",)
     
     FUNCTION = "run"
@@ -1311,6 +1304,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-PromptPlusModel"] = "Prompt + Model"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class PromptPlusModelOutput:
     def __init__(self):
         pass
@@ -1323,7 +1317,7 @@ class PromptPlusModelOutput:
             }
         }
     
-    RETURN_TYPES = (any_type, "STRING")
+    RETURN_TYPES = ("*", "STRING")
     RETURN_NAMES = ("model name", "prompt")
     
     FUNCTION = "run"
@@ -2043,6 +2037,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationSetItemNode"] = "Accumulation Set Ite
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class CacheShield:
     def __init__(self):
         pass
@@ -2051,11 +2046,11 @@ class CacheShield:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,)
+                "any": ("*",)
             }
         }
     
-    RETURN_TYPES = (any_type,)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
@@ -2121,6 +2116,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-HashModel"] = "Hash Model"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class CacheShieldProxy:
     def __init__(self):
         pass
@@ -2129,18 +2125,18 @@ class CacheShieldProxy:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "check": (any_type,)
+                "check": ("*",)
             },
             "optional": {
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,)
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",)
             }
         }
     
-    RETURN_TYPES = (any_type, any_type, any_type, any_type, any_type)
+    RETURN_TYPES = ("*", "*", "*", "*", "*")
     RETURN_NAMES = ("_1_", "_2_", "_3_", "_4_", "_5_")
     
     FUNCTION = "run"
@@ -2158,6 +2154,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShieldProxy"] = "Cache Proxy"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowManualCache:
     def __init__(self):
         pass
@@ -2166,12 +2163,12 @@ class FlowManualCache:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "enabled": ("BOOLEAN", {"default": False}),
             }
         }
     
-    RETURN_TYPES = (any_type,)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("any",)
     
     FUNCTION = "run"
@@ -2191,6 +2188,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowNode:
     def __init__(self):
         pass
@@ -2201,15 +2199,15 @@ class FlowNode:
             "required": {
             },
             "optional": {
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,),
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",),
             }
         }
     
-    RETURN_TYPES = (any_type, any_type, any_type, any_type, any_type)
+    RETURN_TYPES = ("*", "*", "*", "*", "*")
     RETURN_NAMES = ("_1_", "_2_", "_3_", "_4_", "_5_")
     
     FUNCTION = "run"
@@ -2223,6 +2221,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowNode"] = "Flow Node"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeInput:
     def __init__(self):
         pass
@@ -2235,11 +2234,11 @@ class FlowPipeInput:
             },
             "optional": {
                 "pipe": ("sv_pipe",),
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,),
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",),
             }
         }
     
@@ -2274,6 +2273,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInput"] = "Pipe In"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeOutput:
     def __init__(self):
         pass
@@ -2287,7 +2287,7 @@ class FlowPipeOutput:
             }
         }
     
-    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
+    RETURN_TYPES = ("sv_pipe", "*", "*", "*", "*", "*")
     RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
     
     FUNCTION = "run"
@@ -2307,6 +2307,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutput"] = "Pipe Out"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeInputLarge:
     def __init__(self):
         pass
@@ -2319,16 +2320,16 @@ class FlowPipeInputLarge:
             },
             "optional": {
                 "pipe": ("sv_pipe",),
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,),
-                "_6_": (any_type,),
-                "_7_": (any_type,),
-                "_8_": (any_type,),
-                "_9_": (any_type,),
-                "_10_": (any_type,)
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",),
+                "_6_": ("*",),
+                "_7_": ("*",),
+                "_8_": ("*",),
+                "_9_": ("*",),
+                "_10_": ("*",)
             }
         }
     
@@ -2373,6 +2374,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputLarge"] = "Pipe In Large"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeOutputLarge:
     def __init__(self):
         pass
@@ -2386,7 +2388,7 @@ class FlowPipeOutputLarge:
             }
         }
     
-    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type, any_type)
+    RETURN_TYPES = ("sv_pipe", "*", "*", "*", "*", "*", "*", "*", "*", "*", "*")
     RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_", "_6_", "_7_", "_8_", "_9_", "_10_")
     
     FUNCTION = "run"
@@ -2406,6 +2408,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputLarge"] = "Pipe Out Large"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeInputIndex:
     def __init__(self):
         pass
@@ -2418,7 +2421,7 @@ class FlowPipeInputIndex:
             },
             "optional": {
                 "pipe": ("sv_pipe",),
-                "value": (any_type,),
+                "value": ("*",),
             }
         }
     
@@ -2446,6 +2449,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputIndex"] = "Pipe In Index"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeOutputIndex:
     def __init__(self):
         pass
@@ -2459,7 +2463,7 @@ class FlowPipeOutputIndex:
             }
         }
     
-    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_TYPES = ("sv_pipe", "*")
     RETURN_NAMES = ("pipe", "value")
     
     FUNCTION = "run"
@@ -2479,6 +2483,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputIndex"] = "Pipe Out Index"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeInputKey:
     def __init__(self):
         pass
@@ -2491,7 +2496,7 @@ class FlowPipeInputKey:
             },
             "optional": {
                 "pipe": ("sv_pipe",),
-                "value": (any_type,),
+                "value": ("*",),
             }
         }
     
@@ -2517,6 +2522,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKey"] = "Pipe In Key"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeOutputKey:
     def __init__(self):
         pass
@@ -2530,7 +2536,7 @@ class FlowPipeOutputKey:
             }
         }
     
-    RETURN_TYPES = ("sv_pipe", any_type)
+    RETURN_TYPES = ("sv_pipe", "*")
     RETURN_NAMES = ("pipe", "value")
     
     FUNCTION = "run"
@@ -2548,6 +2554,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeOutputKey"] = "Pipe Out Key"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeInputKeyTuple:
     def __init__(self):
         pass
@@ -2560,11 +2567,11 @@ class FlowPipeInputKeyTuple:
             },
             "optional": {
                 "pipe": ("sv_pipe",),
-                "_1_": (any_type,),
-                "_2_": (any_type,),
-                "_3_": (any_type,),
-                "_4_": (any_type,),
-                "_5_": (any_type,)
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",)
             }
         }
     
@@ -2594,6 +2601,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeInputKeyTuple"] = "Pipe In Tuple"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class FlowPipeOutputKeyTuple:
     def __init__(self):
         pass
@@ -2607,7 +2615,7 @@ class FlowPipeOutputKeyTuple:
             }
         }
     
-    RETURN_TYPES = ("sv_pipe", any_type, any_type, any_type, any_type, any_type)
+    RETURN_TYPES = ("sv_pipe", "*", "*", "*", "*", "*")
     RETURN_NAMES = ("pipe", "_1_", "_2_", "_3_", "_4_", "_5_")
     
     FUNCTION = "run"
@@ -2855,6 +2863,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-FlowPipeCombine"] = "Pipe Combine"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class CheckNone:
     def __init__(self):
         pass
@@ -2863,7 +2872,7 @@ class CheckNone:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,)
+                "any": ("*",)
             }
         }
     
@@ -2881,6 +2890,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-CheckNone"] = "Check None"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class CheckNoneNot:
     def __init__(self):
         pass
@@ -2889,7 +2899,7 @@ class CheckNoneNot:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,)
+                "any": ("*",)
             }
         }
     
@@ -2907,6 +2917,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-CheckNoneNot"] = "Check Not None"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class DefaultInt:
     def __init__(self):
         pass
@@ -2915,7 +2926,7 @@ class DefaultInt:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "default": ("INT", {"min": -sys.maxsize, "max": sys.maxsize, "step": 1, "default": 0})
             }
         }
@@ -2936,6 +2947,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultInt"] = "Default Int"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class DefaultFloat:
     def __init__(self):
         pass
@@ -2944,7 +2956,7 @@ class DefaultFloat:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "default": ("FLOAT", {"min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01, "default": 0.0})
             }
         }
@@ -2965,6 +2977,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultFloat"] = "Default Float"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class DefaultString:
     def __init__(self):
         pass
@@ -2973,7 +2986,7 @@ class DefaultString:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "default": ("STRING", {"multiline": False, "default": ""})
             }
         }
@@ -2994,6 +3007,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultString"] = "Default String"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class DefaultBoolean:
     def __init__(self):
         pass
@@ -3002,7 +3016,7 @@ class DefaultBoolean:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "default": ("BOOLEAN", {"default": False})
             }
         }
@@ -3023,6 +3037,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultBoolean"] = "Default Boolean"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class DefaultValue:
     def __init__(self):
         pass
@@ -3031,12 +3046,12 @@ class DefaultValue:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
-                "default": (any_type,)
+                "any": ("*",),
+                "default": ("*",)
             }
         }
     
-    RETURN_TYPES = (any_type,)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("value",)
     
     FUNCTION = "run"
@@ -3052,6 +3067,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-DefaultValue"] = "Default Value"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class AnyToAny:
     def __init__(self):
         pass
@@ -3060,11 +3076,11 @@ class AnyToAny:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "input": (any_type,)
+                "input": ("*",)
             }
         }
     
-    RETURN_TYPES = (any_type,)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("output",)
     
     FUNCTION = "run"
@@ -3078,6 +3094,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-AnyToAny"] = "Any to Any"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class ConsolePrint:
     def __init__(self):
         pass
@@ -3089,7 +3106,7 @@ class ConsolePrint:
                 "text": ("STRING", {"multiline": True})
             },
             "optional": {
-                "signal": (any_type,),
+                "signal": ("*",),
             }
         }
     
@@ -3108,6 +3125,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrint"] = "Console Print"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class ConsolePrintMulti:
     def __init__(self):
         pass
@@ -3117,11 +3135,11 @@ class ConsolePrintMulti:
         return {
             "required": {
                 "text": ("STRING", {"multiline": True}),
-                "signal1": (any_type,),
+                "signal1": ("*",),
             },
             "optional": {
-                "signal2": (any_type,),
-                "signal3": (any_type,),
+                "signal2": ("*",),
+                "signal3": ("*",),
             }
         }
     
@@ -3174,6 +3192,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-ConsolePrintLoop"] = "Console Print Loop"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class AssertNotNone:
     def __init__(self):
         pass
@@ -3182,7 +3201,7 @@ class AssertNotNone:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,)
+                "any": ("*",)
             }
         }
     
@@ -3202,6 +3221,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-AssertNotNone"] = "Assert Not None"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class TimerStart:
     def __init__(self):
         pass
@@ -3210,12 +3230,12 @@ class TimerStart:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,)
+                "any": ("*",)
             }
         }
     
     OUTPUT_NODE = True
-    RETURN_TYPES = (any_type, "TIMER")
+    RETURN_TYPES = ("*", "TIMER")
     RETURN_NAMES = ("any", "timestamp")
     
     FUNCTION = "run"
@@ -3229,6 +3249,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-TimerStart"] = "Timer Start"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class TimerEnd:
     def __init__(self):
         pass
@@ -3237,13 +3258,13 @@ class TimerEnd:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": (any_type,),
+                "any": ("*",),
                 "timestamp": ("TIMER",)
             }
         }
     
     OUTPUT_NODE = True
-    RETURN_TYPES = (any_type, "FLOAT")
+    RETURN_TYPES = ("*", "FLOAT")
     RETURN_NAMES = ("any", "time")
     
     FUNCTION = "run"
@@ -3545,6 +3566,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-ConditioningReroute"] = "Conditioning Reroute"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class SwapValues:
     def __init__(self):
         pass
@@ -3553,13 +3575,13 @@ class SwapValues:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "_1_": (any_type,),
-                "_2_": (any_type,),
+                "_1_": ("*",),
+                "_2_": ("*",),
                 "swap": ("BOOLEAN", {"default": True})
             }
         }
     
-    RETURN_TYPES = (any_type, any_type)
+    RETURN_TYPES = ("*", "*")
     RETURN_NAMES = ("_2_", "_1_")
     
     FUNCTION = "run"
