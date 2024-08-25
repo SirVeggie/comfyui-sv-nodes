@@ -2085,8 +2085,8 @@ def hash_item(item):
         else:
             return hashlib.md5(repr(item).encode()).hexdigest()
 
-NODE_CLASS_MAPPINGS["SV-CacheShield"] = CacheShield
-NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShield"] = "Cache Shield"
+# NODE_CLASS_MAPPINGS["SV-CacheShield"] = CacheShield
+# NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShield"] = "Cache Shield"
 
 #-------------------------------------------------------------------------------#
 
@@ -2149,8 +2149,8 @@ class CacheShieldProxy:
     def IS_CACHED(s, check, **kwargs):
         return CacheShield.IS_CACHED(s, check)
 
-NODE_CLASS_MAPPINGS["SV-CacheShieldProxy"] = CacheShieldProxy
-NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShieldProxy"] = "Cache Proxy"
+# NODE_CLASS_MAPPINGS["SV-CacheShieldProxy"] = CacheShieldProxy
+# NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShieldProxy"] = "Cache Proxy"
 
 #-------------------------------------------------------------------------------#
 
@@ -2183,8 +2183,8 @@ class FlowManualCache:
             return "cached"
         return None
 
-NODE_CLASS_MAPPINGS["SV-FlowManualCache"] = FlowManualCache
-NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
+# NODE_CLASS_MAPPINGS["SV-FlowManualCache"] = FlowManualCache
+# NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
 
 #-------------------------------------------------------------------------------#
 
