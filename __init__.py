@@ -2,6 +2,7 @@ import os
 import time
 import comfy.samplers
 import folder_paths
+from .logic import calculate_sigma_range, calculate_sigma_range_percent, default, process, process_advanced, remove_comments
 import node_helpers
 import hashlib
 import math
@@ -3284,7 +3285,7 @@ def parseCurve(curve):
         while "(" in curve or ")" in curve:
             curve = re.sub(r"\([^()]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
             curve = collapseSigns(curve)
-        parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?=[-+])", curve))]
+        parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?<!\*|/)(?=[-+])", curve))]
         if len(parts) == 0:
             raise ValueError("Invalid curve: No parts found")
         sum = 0
@@ -3396,6 +3397,47 @@ class ApplyCurveFromStep:
 
 NODE_CLASS_MAPPINGS["SV-ApplyCurveFromStep"] = ApplyCurveFromStep
 NODE_DISPLAY_NAME_MAPPINGS["SV-ApplyCurveFromStep"] = "Apply Curve from Step"
+
+#-------------------------------------------------------------------------------#
+
+class MathOperation:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "op": ("STRING", {"multiline": False, "default": ""})
+            },
+            "optional": {
+                "a": ("INT,FLOAT",),
+                "b": ("INT,FLOAT",),
+            }
+        }
+    
+    RETURN_TYPES = ("INT", "FLOAT")
+    RETURN_NAMES = ("int", "float")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, op: str, a=None, b=None):
+        op = op.lower()
+        if a is None and 'a' in op:
+            raise ValueError("Invalid operation: Missing 'a' value")
+        if b is None and 'b' in op:
+            raise ValueError("Invalid operation: Missing 'b' value")
+        op = re.sub(r"\s+", "", op)
+        op = re.sub(r"(?<=\d)a", "*" + str(a), op)
+        op = re.sub(r"a", str(a), op)
+        op = re.sub(r"(?<=\d)b", "*" + str(b), op)
+        op = re.sub(r"b", str(b), op)
+        result = parseCurve(op)(0)
+        return math.floor(result), result
+
+NODE_CLASS_MAPPINGS["SV-MathOperation"] = MathOperation
+NODE_DISPLAY_NAME_MAPPINGS["SV-MathOperation"] = "Math Operation"
 
 #-------------------------------------------------------------------------------#
 
@@ -3530,415 +3572,3 @@ class SwapValues:
 
 NODE_CLASS_MAPPINGS["SV-SwapValues"] = SwapValues
 NODE_DISPLAY_NAME_MAPPINGS["SV-SwapValues"] = "Swap"
-
-#-------------------------------------------------------------------------------#
-# Helper functions
-
-def default(value, *args):
-    if value is not None:
-        return value
-    for arg in args:
-        if arg is not None:
-            return arg
-    return None
-
-#-------------------------------------------------------------------------------#
-
-def approx_index(reference: list[float], value: float):
-    if value > reference[0]:
-        raise ValueError("Value is greater than the maximum value in the reference list")
-    if value == 0:
-        return len(reference) - 1
-    for i in range(len(reference)):
-        if value > reference[i]:
-            return i - 1 + (value - reference[i-1]) / (reference[i] - reference[i-1])
-
-def calculate_sigma_range(reference: list[float], start: float, end: float, steps: int):
-    start_percentage = approx_index(reference, start) / (len(reference) - 1)
-    end_percentage = approx_index(reference, end) / (len(reference) - 1)
-    return calculate_sigma_range_percent(reference, start_percentage, end_percentage, steps)
-
-def calculate_sigma_range_percent(reference: list[float], start: float, end: float, steps: int):
-    sigmas = []
-    dist = (end - start) / steps
-    for i in range(steps + 1):
-        approx = (start + dist * i) * (len(reference) - 1)
-        delta = approx - int(approx)
-        lower_index = math.floor(approx)
-        upper_index = math.ceil(approx)
-        sigmas.append(reference[lower_index] + delta * (reference[upper_index] - reference[lower_index]))
-    return sigmas
-
-#-------------------------------------------------------------------------------#
-
-processing_depth = 5
-var_char = "$"
-char_pair = ("{", "}")
-adv_char_pair = ("[", "]")
-bracket_pairs = [("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")]
-
-#-------------------------------------------------------------------------------#
-
-def parse_index(input: str):
-    # parse index from input, eg. _1_
-    if input.startswith("_") and input.endswith("_"):
-        try:
-            return int(input[1:-1])
-        except:
-            raise ValueError(f"Invalid index input: {input}")
-
-def input_add(input: str, value: int):
-    # add value to input index, eg. _1_ + 1 = _2_
-    index = parse_index(input)
-    return f"_{index + value}_"
-
-#-------------------------------------------------------------------------------#
-
-def parse_vars(variables: str):
-    vars: dict[str, str] = {}
-    lines = variables.split("\n")
-    for line in lines:
-        line = line.strip()
-        if len(line) == 0:
-            continue
-        if line[0] == "#":
-            continue
-        if line.startswith("//"):
-            continue
-        
-        parts = line.split("=", 1)
-        if len(parts) != 2:
-            log_error(f"Invalid variable definition: {line}")
-            continue
-        
-        name = parts[0].strip()
-        text = parts[1].strip()
-        vars[name] = text
-    return vars
-def build_var(name: str):
-    if " " in name:
-        return f"{var_char}({name})"
-    return f"{var_char}{name}"
-def clean_prompt(prompt: str):
-    prompt = re.sub(r"\s*[\n\r,][,\s]*", ", ", prompt)
-    prompt = re.sub(r"\s+", " ", prompt)
-    return re.sub(r"[,\s]+$", "", prompt)
-def remove_comments(prompt: str):
-    # remove comments from prompt, accepts // and # comments
-    lines = prompt.split("\n")
-    lines = [line for line in lines if not line.strip().startswith("//") and not line.strip().startswith("#")]
-    return "\n".join(lines)
-def process(prompt, output: int, variables: str, seed: int):
-    prompt = remove_comments(prompt)
-    prompt = clean_prompt(prompt)
-    
-    vars = parse_vars(variables)
-    names: list[str] = vars.keys()
-    names = sorted(names, key=len, reverse=True)
-    
-    depth = 0
-    previous_prompt = prompt
-    while depth < processing_depth:
-        prompt = decode(prompt, output, seed)
-        
-        for name in names:
-            if name not in prompt:
-                continue
-            
-            text = vars[name]
-            if " " not in name:
-                prompt = prompt.replace(f"{var_char}{name}", text)
-            prompt = prompt.replace(f"{var_char}({name})", text)
-        
-        if prompt == previous_prompt:
-            break
-        previous_prompt = prompt
-        depth += 1
-    
-    return clean_prompt(prompt)
-
-def log_error(message):
-    return
-def error_context(text, i):
-    return text[max(0, i-10):min(len(text), i+10)]
-def is_opening(text, i):
-    list = [char_pair, adv_char_pair] + bracket_pairs
-    list = [item[0] for item in list]
-    return text[i] in list and (i == 0 or text[i-1] != '\\')
-def is_closing(text, i):
-    list = [char_pair, adv_char_pair] + bracket_pairs
-    list = [item[1] for item in list]
-    return text[i] in list and (i == 0 or text[i-1] != '\\')
-def get_pair(bracket: str, opening: bool):
-    list = [char_pair, adv_char_pair] + bracket_pairs
-    for pair in list:
-        if opening and pair[0] == bracket:
-            return pair[1]
-        if not opening and pair[1] == bracket:
-            return pair[0]
-    return None
-def decode(text: str, output: int, seed: int):
-    depth = 0
-    start = -1
-    end = -1
-    mode = "random"
-    count = 0
-    splits = []
-    rand = _random.Random(seed)
-    
-    if len(text) == 0:
-        return text
-    
-    i = -1
-    while i + 1 < len(text):
-        i += 1
-        
-        if is_opening(text, i):
-            if depth == 0 and text[i] != char_pair[0]:
-                continue
-            if depth == 0:
-                start = i
-            depth += 1
-        elif is_closing(text, i):
-            if depth > 0:
-                depth -= 1
-            if depth == 0 and text[i] == char_pair[1] and start != -1:
-                end = i
-        elif text[i] == '|' and depth == 1:
-            splits.append(i)
-        elif text[i] == ':' and depth == 1:
-            splits.append(i)
-            mode = "hr"
-        
-        if end != -1:
-            if mode == "hr" and len(splits) > 2:
-                log_error("Warning: multiple splits in hr mode")
-                return text
-            
-            if mode == "hr":
-                part1 = text[start+1:splits[0]]
-                part2 = text[splits[0]+1:end if len(splits) == 1 else splits[1]]
-                part3 = "'2" if len(splits) == 1 else text[splits[1]+1:end]
-                if part2 == "'1":
-                    part2 = part1
-                if part3 == "'1":
-                    part3 = part1
-                if part3 == "'2":
-                    part3 = part2
-                part = [part1, part2, part3][output]
-                text = text[:start] + part + text[end+1:]
-                
-            elif mode == "random":
-                parts = []
-                if len(splits) == 0:
-                    parts.append(text[start+1:end])
-                else:
-                    for k in range(len(splits)):
-                        if k == 0:
-                            parts.append(text[start+1:splits[k]])
-                        else:
-                            parts.append(text[splits[k-1]+1:splits[k]])
-                    parts.append(text[splits[-1]+1:end])
-                
-                count += 1
-                part = rand.choice(parts)
-                text = text[:start] + part + text[end+1:]
-            
-            else:
-                start += 1
-            
-            i = start - 1
-            start = -1
-            end = -1
-            splits = []
-            mode = "random"
-    
-    return text
-
-#-------------------------------------------------------------------------------#
-# Advanced Prompt Processing
-
-def process_advanced(prompt, variables: str, seed: int, step: int, progress: float):
-    prompt = remove_comments(prompt)
-    prompt = clean_prompt(prompt)
-    
-    if len(prompt) == 0:
-        return prompt
-    
-    vars = parse_vars(variables)
-    names: list[str] = vars.keys()
-    names = sorted(names, key=len, reverse=True)
-    
-    depth = 0
-    previous_prompt = prompt
-    while depth < processing_depth:
-        prompt = decode_advanced(prompt, seed, step, progress)
-        
-        for name in names:
-            if name not in prompt:
-                continue
-            
-            text = vars[name]
-            if " " not in name:
-                prompt = prompt.replace(f"{var_char}{name}", text)
-            prompt = prompt.replace(f"{var_char}({name})", text)
-        
-        if prompt == previous_prompt:
-            break
-        previous_prompt = prompt
-        depth += 1
-    
-    return clean_prompt(prompt)
-
-def decode_advanced(text: str, seed: int, step: int, progress: float):
-    depth = 0
-    start = -1
-    end = -1
-    mode = ""
-    splits = []
-    pipes = 0
-    colons = 0
-    rand = _random.Random(seed)
-    
-    if len(text) == 0:
-        return text
-    
-    brackets = []
-    i = -1
-    while i + 1 < len(text):
-        i += 1
-        
-        closing = is_closing(text, i) and not is_opening(text, i)
-        if closing and len(brackets) == 0:
-            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
-        if closing and brackets[-1][1] != get_pair(text[i], False):
-            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
-        closing = is_closing(text, i) and len(brackets) and brackets[-1][1] == get_pair(text[i], False)
-        opening = not closing and is_opening(text, i)
-        
-        if opening:
-            brackets.append((i, text[i]))
-            if depth == 0 and text[i] not in [char_pair[0], adv_char_pair[0]]:
-                continue
-            if depth == 0:
-                start = i
-                mode = "curly" if text[i] == char_pair[0] else "square"
-            depth += 1
-        elif closing:
-            prev = brackets.pop()
-            if prev[1] != get_pair(text[i], False):
-                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
-            if depth == 1 and text[i] in [char_pair[1], adv_char_pair[1]] and start != -1:
-                end = i
-            if depth <= 0 and text[i] in [char_pair[1], adv_char_pair[1]]:
-                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
-            if depth > 0:
-                depth -= 1
-        elif text[i] == '|' and depth == 1:
-            splits.append((i, '|'))
-            pipes += 1
-        elif text[i] == ':' and depth == 1:
-            splits.append((i, ':'))
-            colons += 1
-        
-        if end != -1:
-            if mode == "curly" and pipes + colons == 0:
-                text = text[:start] + text[start+1:end] + text[end+1:]
-            elif mode == "curly" and colons > 0 and pipes > 0:
-                raise ValueError(f"Invalid curly bracket content at {text[start:end+1]}")
-            elif mode == "curly" and colons > 0:
-                # part1 = text[start+1:splits[0][0]]
-                # text = text[:start] + part1 + text[end+1:]
-                parts = []
-                for k in range(len(splits)):
-                    if k == 0:
-                        parts.append(text[start+1:splits[k][0]])
-                    else:
-                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
-                parts.append(text[splits[-1][0]+1:end])
-                
-                index = min(int(progress), len(parts) - 1)
-                part = parts[index]
-                text = text[:start] + part + text[end+1:]
-            elif mode == "curly" and pipes > 0:
-                parts = []
-                for k in range(len(splits)):
-                    if k == 0:
-                        parts.append(text[start+1:splits[k][0]])
-                    else:
-                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
-                parts.append(text[splits[-1][0]+1:end])
-                
-                part = rand.choice(parts)
-                text = text[:start] + part + text[end+1:]
-            
-            elif mode == "square" and pipes + colons == 0:
-                text = text[:start] + text[start+1:end] + text[end+1:]
-            elif mode == "square" and pipes > 0 and colons > 0:
-                raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
-            elif mode == "square" and pipes > 0:
-                parts = []
-                for k in range(len(splits)):
-                    if k == 0:
-                        parts.append(text[start+1:splits[k][0]])
-                    else:
-                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
-                parts.append(text[splits[-1][0]+1:end])
-                norm = (step - 1) % len(parts)
-                part = parts[norm]
-                text = text[:start] + part + text[end+1:]
-            elif mode == "square" and colons > 0:
-                if colons % 2 != 0:
-                    raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
-                parts = []
-                weights = []
-                if colons == 2 and text[splits[1][0]+1:end].replace(".", "", 1).isdigit():
-                    parts.append(text[start+1:splits[0][0]])
-                    parts.append(text[splits[0][0]+1:splits[1][0]])
-                    weight = text[splits[1][0]+1:end]
-                    weights = [weight, "end"]
-                else:
-                    for k in range(int(len(splits) / 2)):
-                        index = k * 2
-                        if index == 0:
-                            parts.append(text[start+1:splits[index][0]])
-                        else:
-                            parts.append(text[splits[index-1][0]+1:splits[index][0]])
-                        weights.append(text[splits[index][0]+1:splits[index+1][0]])
-                    parts.append(text[splits[-1][0]+1:end])
-                    for k in range(len(parts)):
-                        if re.match(r"'\d+", parts[k]) is not None:
-                            index = int(parts[k][1:]) - 1
-                            if index < 0 or index >= len(parts) or index == k:
-                                raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
-                            parts[k] = parts[index]
-                    weights.append("end")
-                
-                part = ""
-                for k in range(len(weights)):
-                    if weights[k] == "end":
-                        part = parts[k]
-                        break
-                    is_step = str(weights[k]).startswith("s")
-                    weight = int(weights[k][1:]) if is_step else float(weights[k])
-                    if is_step and step <= weight:
-                        part = parts[k]
-                        break
-                    if not is_step and progress <= weight:
-                        part = parts[k]
-                        break
-                    
-                text = text[:start] + part + text[end+1:]
-                
-            else:
-                raise ValueError("Unexpected bracket evaluation")
-            
-            i = start - 1
-            start = -1
-            end = -1
-            splits = []
-            mode = ""
-            pipes = 0
-            colons = 0
-    
-    return text
