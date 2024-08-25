@@ -2,7 +2,8 @@
 
 Currently includes simple nodes that I wanted for easier and more compact workflow creation, and flow control nodes.
 
-The Flow control nodes require my custom execution.py at [comfyui-flow-control](https://github.com/SirVeggie/comfyui-flow-control).
+~~The Flow control nodes require my custom execution.py at [comfyui-flow-control](https://github.com/SirVeggie/comfyui-flow-control).~~
+After the execution model inversion, my custom execution model is no longer compatible with latest comfy, and the relevant nodes have been removed at least for now. Instead new nodes that are compatible with the execution model inversion have now been added. I will probably try to add caching nodes back at some point.
 
 Beware of bugs.
 
