@@ -969,7 +969,43 @@ class MathCompare:
         return (False,)
 
 NODE_CLASS_MAPPINGS["SV-MathCompare"] = MathCompare
-NODE_DISPLAY_NAME_MAPPINGS["SV-MathCompare"] = "Compare"
+NODE_DISPLAY_NAME_MAPPINGS["SV-MathCompare"] = "Simple Compare"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class EquationCompare:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "equation": ("STRING", {"multiline": False, "default": ""}),
+            },
+            "optional": {
+                "a": ("*",),
+                "b": ("*",),
+            }
+        }
+    
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("bool",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, equation, a=None, b=None):
+        equation = re.sub(r"\s+", "", equation)
+        equation = re.sub(r"(?<=\d)a(?!nd)", "*" + str(a), equation)
+        equation = re.sub(r"a(?!nd)", str(a), equation)
+        equation = re.sub(r"(?<=\d)b", "*" + str(b), equation)
+        equation = re.sub(r"b", str(b), equation)
+        return (evaluateComparison(equation, 0),)
+
+NODE_CLASS_MAPPINGS["SV-EquationCompare"] = EquationCompare
+NODE_DISPLAY_NAME_MAPPINGS["SV-EquationCompare"] = "Equation Compare"
 
 #-------------------------------------------------------------------------------#
 
@@ -1427,6 +1463,110 @@ class InputSelectBoolean:
 
 NODE_CLASS_MAPPINGS["SV-InputSelectBoolean"] = InputSelectBoolean
 NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelectBoolean"] = "Boolean Select"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class InputSelectCompare:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "equation": ("STRING", {"multiline": False, "default": ""})
+            },
+            "optional": {
+                "true": ("*", {"lazy": True}),
+                "false": ("*", {"lazy": True}),
+                "x": ("*",),
+            }
+        }
+    
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("out",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, x, equation, **kwargs):
+        if evaluateComparison(equation, x):
+            return ["true"]
+        return ["false"]
+    
+    def run(self, x, equation: str, true=None, false=None):
+        if evaluateComparison(equation, x):
+            return (true,)
+        return (false,)
+
+def evaluateComparison(op: str, var):
+    while "(" in op or ")" in op:
+        op = re.sub(r"\([^()]+\)", lambda x : str(evaluateComparison(x.group(0)[1:-1], var)), op)
+    op = re.sub(r"\s+", "", op.lower())
+    op = re.sub(r"(?<=\d)x(?!or)", "*" + str(var), op)
+    op = re.sub(r"x(?!or)", str(var), op)
+    
+    operators = ["and", "or", "xor"]
+    operators = "|".join(operators)
+    parts = re.sub(f"({operators})", r"<|>\1<|>", op).split("<|>")
+    parts[0] = evaluatePart(parts[0])
+    for i in range(1, len(parts), 2):
+        parts[i+1] = evaluatePart(parts[i+1])
+        p = parts[i]
+        if parts[i-1] != True and parts[i-1] != False:
+            raise SyntaxError(f"operand {parts[i-1]} of {p} wasn't a boolean")
+        if parts[i+1] != True and parts[i+1] != False:
+            raise SyntaxError(f"operand {parts[i+1]} of {p} wasn't a boolean")
+        if p == "and":
+            parts[i+1] = parts[i-1] and parts[i+1]
+        elif p == "or":
+            parts[i+1] = parts[i-1] or parts[i+1]
+        elif p == "xor":
+            parts[i+1] = parts[i-1] != parts[i+1]
+    return parts[-1]
+
+def evaluatePart(part: str):
+    part = part.replace("==", "=")
+    operators = ["=", "!=", "<=", ">=", "<", ">"]
+    operators = "|".join(operators)
+    parts = re.sub(f"({operators})", r"<|>\1<|>", part).split("<|>")
+    
+    if len(parts) == 1:
+        return evaluateSubPart(parts[0])
+    parts[0] = evaluateSubPart(parts[0])
+    for i in range(1, len(parts), 2):
+        parts[i+1] = evaluateSubPart(parts[i+1])
+        p = parts[i]
+        if p == "=" and not (parts[i-1] == parts[i+1]):
+            return False
+        if p == "!=" and not (parts[i-1] != parts[i+1]):
+            return False
+        if p == "<" and not (parts[i-1] < parts[i+1]):
+            return False
+        if p == ">" and not (parts[i-1] > parts[i+1]):
+            return False
+        if p == "<=" and not (parts[i-1] <= parts[i+1]):
+            return False
+        if p == ">=" and not (parts[i-1] >= parts[i+1]):
+            return False
+    return True
+
+def evaluateSubPart(part: str):
+    if part.lower() == "true":
+        return True
+    if part.lower() == "false":
+        return False
+    if part.lower() == "none":
+        return None
+    if re.sub(r"^[+-]", "", part).isdigit():
+        return int(part)
+    if re.sub(r"^[+-]", "", part).replace('.', '', 1).isdigit():
+        return float(part)
+    return parseCurve(part)(0)
+
+NODE_CLASS_MAPPINGS["SV-InputSelectCompare"] = InputSelectCompare
+NODE_DISPLAY_NAME_MAPPINGS["SV-InputSelectCompare"] = "Comparison Select"
 
 #-------------------------------------------------------------------------------#
 
