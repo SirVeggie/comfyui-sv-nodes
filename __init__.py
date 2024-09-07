@@ -2,7 +2,7 @@ import os
 import time
 import comfy.samplers
 import folder_paths
-from .logic import calculate_sigma_range, calculate_sigma_range_percent, default, process, process_advanced, remove_comments
+from .logic import calculate_sigma_range, calculate_sigma_range_percent, default, needs_seed, process, process_advanced, remove_comments, separate_lora, separate_lora_advanced
 import node_helpers
 import hashlib
 import math
@@ -11,6 +11,7 @@ import json
 import re
 import torch
 import sys
+import time
 from functools import partial
 from comfy_execution.graph_utils import GraphBuilder, is_link
 from comfy_execution.graph import ExecutionBlocker
@@ -115,11 +116,11 @@ class PromptProcessing:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "text": ("STRING", {"multiline": True, "forceInput": True})
+                "text": ("STRING", {"forceInput": True})
             },
             "optional": {
-                "variables": ("STRING", {"multiline": True, "forceInput": True, "default": ""}),
-                "seed": ("INT", {"forceInput": True, "default": 1})
+                "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True, "lazy": True})
             }
         }
     
@@ -128,6 +129,11 @@ class PromptProcessing:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Processing"
+    
+    def check_lazy_status(self, text, **kwargs):
+        if needs_seed(text):
+            return ["seed"]
+        return []
     
     def run(self, text, variables="", seed=1):
         text = remove_comments(text)
@@ -155,8 +161,8 @@ class PromptProcessingRecursive:
                 "progress": ("FLOAT", {"forceInput": True}),
             },
             "optional": {
-                "variables": ("STRING", {"forceInput": True, "default": ""}),
-                "seed": ("INT", {"forceInput": True, "default": 1}),
+                "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True, "lazy": True}),
             }
         }
     
@@ -165,6 +171,11 @@ class PromptProcessingRecursive:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Processing"
+    
+    def check_lazy_status(self, text, **kwargs):
+        if needs_seed(text):
+            return ["seed"]
+        return []
     
     def run(self, text, step, progress, variables="", seed=1):
         text = remove_comments(text)
@@ -189,7 +200,7 @@ class PromptProcessingAdvanced:
             "optional": {
                 "phase": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
                 "variables": ("STRING", {"forceInput": True}),
-                "seed": ("INT", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True, "lazy": True}),
             }
         }
     
@@ -199,9 +210,13 @@ class PromptProcessingAdvanced:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Processing"
     
+    def check_lazy_status(self, prompt, **kwargs):
+        if needs_seed(prompt):
+            return ["seed"]
+        return []
+    
     def run(self, prompt, steps, phase=1, variables="", seed=1):
         prompt = remove_comments(prompt)
-        prompt, lora = LoraSeparator.run(self, prompt)
         parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
         full_positive = parts[0]
         full_negative = parts[1] if len(parts) > 1 else ""
@@ -215,7 +230,7 @@ class PromptProcessingAdvanced:
             neg = process_advanced(full_negative, variables, seed, i, progress)
             result.append((pos, neg))
         
-        return result, lora
+        return separate_lora_advanced(result)
 
 NODE_CLASS_MAPPINGS["SV-PromptProcessingAdvanced"] = PromptProcessingAdvanced
 NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingAdvanced"] = "Advanced Processing"
@@ -223,6 +238,8 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingAdvanced"] = "Advanced Processing
 #-------------------------------------------------------------------------------#
 
 class PromptProcessingEncode:
+    cache = {}
+    
     def __init__(self):
         pass
     
@@ -243,7 +260,6 @@ class PromptProcessingEncode:
     
     def run(self, clip, prompt):
         steps = len(prompt)
-        cache = {}
         pconds = []
         nconds = []
         
@@ -252,16 +268,29 @@ class PromptProcessingEncode:
             end = i / steps
             pos, neg = prompt[i - 1]
             
-            if pos not in cache:
-                cache[pos] = encode(clip, pos)
-            pcond = node_helpers.conditioning_set_values(cache[pos], {"start_percent": start, "end_percent": end})
+            if not self.cacheHas(pos):
+                self.cacheSet(pos, encode(clip, pos))
+            pcond = node_helpers.conditioning_set_values(self.cacheGet(pos), {"start_percent": start, "end_percent": end})
             pconds += pcond
-            if neg not in cache:
-                cache[neg] = encode(clip, neg)
-            ncond = node_helpers.conditioning_set_values(cache[neg], {"start_percent": start, "end_percent": end})
+            if not self.cacheHas(neg):
+                self.cacheSet(neg, encode(clip, neg))
+            ncond = node_helpers.conditioning_set_values(self.cacheGet(neg), {"start_percent": start, "end_percent": end})
             nconds += ncond
         
+        self.cacheClean()
         return pconds, nconds
+    
+    def cacheHas(self, prompt):
+        return prompt in PromptProcessingEncode.cache
+    def cacheSet(self, prompt, encoded):
+        PromptProcessingEncode.cache[prompt] = [prompt, encoded, time.time_ns() // 1000000]
+    def cacheGet(self, prompt):
+        return PromptProcessingEncode.cache[prompt][1]
+    def cacheClean(self):
+        if len(PromptProcessingEncode.cache) < 200:
+            return
+        for item in sorted(list(PromptProcessingEncode.cache.values()), key=lambda x: x[2])[:100]:
+            del PromptProcessingEncode.cache[item[0]]
 
 def encode(clip, text):
     tokens = clip.tokenize(text)
@@ -757,10 +786,7 @@ class LoraSeparator:
     CATEGORY = "SV Nodes/Processing"
     
     def run(self, text):
-        prompt = re.sub(r"<l\w+:[^>]+>", "", text, 0, re.IGNORECASE)
-        text = remove_comments(text)
-        lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
-        return (prompt, lora)
+        return separate_lora(text)
 
 NODE_CLASS_MAPPINGS["SV-LoraSeparator"] = LoraSeparator
 NODE_DISPLAY_NAME_MAPPINGS["SV-LoraSeparator"] = "Lora Separator"
@@ -1602,6 +1628,84 @@ class FlowBlocker:
 
 NODE_CLASS_MAPPINGS["SV-FlowBlocker"] = FlowBlocker
 NODE_DISPLAY_NAME_MAPPINGS["SV-FlowBlocker"] = "Blocker"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class FlowGate:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "input": ("*", {"lazy": True}),
+                "open": ("BOOLEAN",),
+            },
+        }
+
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("output",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, open, input=None):
+        if open:
+            return ["input"]
+        return []
+
+    def run(self, input, open):
+        if not open:
+            return (ExecutionBlocker(None),)
+        return (input,)
+
+NODE_CLASS_MAPPINGS["SV-FlowGate"] = FlowGate
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowGate"] = "Gate"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class FlowGateMulti:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "input": ("*", {"lazy": True}),
+                "open 1": ("BOOLEAN",),
+                "open 2": ("BOOLEAN",),
+                "open 3": ("BOOLEAN",),
+                "open 4": ("BOOLEAN",),
+                "open 5": ("BOOLEAN",),
+            }
+        }
+
+    RETURN_TYPES = ("*","*","*","*","*")
+    RETURN_NAMES = ("1","2","3","4","5")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def check_lazy_status(self, **kwargs):
+        if kwargs.get("open 1") or kwargs.get("open 2") or kwargs.get("open 3") or kwargs.get("open 4") or kwargs.get("open 5"):
+            return ["input"]
+        return []
+
+    def run(self, input, **kwargs):
+        block = ExecutionBlocker(None)
+        out1 = input if kwargs.get("open 1", False) else block
+        out2 = input if kwargs.get("open 2", False) else block
+        out3 = input if kwargs.get("open 3", False) else block
+        out4 = input if kwargs.get("open 4", False) else block
+        out5 = input if kwargs.get("open 5", False) else block
+        return out1, out2, out3, out4, out5
+
+NODE_CLASS_MAPPINGS["SV-FlowGateMulti"] = FlowGateMulti
+NODE_DISPLAY_NAME_MAPPINGS["SV-FlowGateMulti"] = "Multi Gate"
 
 #-------------------------------------------------------------------------------#
 

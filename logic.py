@@ -64,6 +64,24 @@ def input_add(input: str, value: int):
     return f"_{index + value}_"
 
 #-------------------------------------------------------------------------------#
+# Introspection
+
+def needs_seed(prompt: str):
+    old_prompt = ""
+    while prompt != old_prompt:
+        if re.search(r"{[^\[\]{}()<>]*\|[^\[\]{}()<>]*}", prompt):
+            return True
+        old_prompt = prompt
+        prompt = re.sub(r"[\([{<][^\[\]{}()<>]*[)\]}>]", "", prompt)
+    return False
+
+#-------------------------------------------------------------------------------#
+
+def separate_lora(text: str):
+    prompt = re.sub(r"<l\w+:[^>]+>", "", text, 0, re.IGNORECASE)
+    text = remove_comments(text)
+    lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
+    return (prompt, lora)
 
 def parse_vars(variables: str):
     vars: dict[str, str] = {}
@@ -228,6 +246,14 @@ def decode(text: str, output: int, seed: int):
 
 #-------------------------------------------------------------------------------#
 # Advanced Prompt Processing
+
+def separate_lora_advanced(prompts: list[str]):
+    lora = separate_lora(prompts[0][0])[1]
+    for i in range(len(prompts)):
+        prompt = separate_lora(prompts[i][0])[0]
+        prompt = clean_prompt(prompt)
+        prompts[i] = (prompt, prompts[i][1])
+    return prompts, lora
 
 def process_advanced(prompt, variables: str, seed: int, step: int, progress: float):
     prompt = remove_comments(prompt)
