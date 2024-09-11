@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import comfy.samplers
 import folder_paths
 from .logic import calculate_sigma_range, calculate_sigma_range_percent, default, needs_seed, process, process_advanced, remove_comments, separate_lora, separate_lora_advanced
@@ -3838,3 +3839,44 @@ class SwapValues:
 
 NODE_CLASS_MAPPINGS["SV-SwapValues"] = SwapValues
 NODE_DISPLAY_NAME_MAPPINGS["SV-SwapValues"] = "Swap"
+
+#-------------------------------------------------------------------------------#
+# Experiments
+
+# By Thyri on discord
+class CompressConds:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "positive": ("CONDITIONING",),
+            },
+            "optional": {
+                "negative": ("CONDITIONING",),
+            }
+        }
+    
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("positive", "negative")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Experiments"
+    
+    
+    def run(self, positive, negative=None):
+        pos = self.compress(positive)
+        neg = self.compress(negative) if negative is not None else None
+        return pos, neg
+        
+    def compress(self, conditioning):
+        out = copy.deepcopy(conditioning)
+        for o in out:
+            o[0] = self.reduc(o[0])
+        return out
+    
+    def reduc(self, o):
+        u,s,v = torch.svd(o)
+        return (u[0,:75,:75]@s[0,:75].diag()@v[0,:,:75].T)[None]
+
+NODE_CLASS_MAPPINGS["SV-CompressConds"] = CompressConds
+NODE_DISPLAY_NAME_MAPPINGS["SV-CompressConds"] = "Compress Conds"
