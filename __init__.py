@@ -226,6 +226,7 @@ class PromptProcessingAdvanced:
         
         for i in range(1, steps + 1):
             progress = 1 if steps == 1 else (i - 1) / (steps - 1)
+            progress *= 0.999
             progress += phase - 1
             pos = process_advanced(full_positive, variables, seed, i, progress)
             neg = process_advanced(full_negative, variables, seed, i, progress)

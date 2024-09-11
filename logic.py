@@ -344,8 +344,6 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
             elif mode == "curly" and colons > 0 and pipes > 0:
                 raise ValueError(f"Invalid curly bracket content at {text[start:end+1]}")
             elif mode == "curly" and colons > 0:
-                # part1 = text[start+1:splits[0][0]]
-                # text = text[:start] + part1 + text[end+1:]
                 parts = []
                 for k in range(len(splits)):
                     if k == 0:
@@ -353,6 +351,12 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                     else:
                         parts.append(text[splits[k-1][0]+1:splits[k][0]])
                 parts.append(text[splits[-1][0]+1:end])
+                for k in range(len(parts)):
+                    if re.match(r"'\d+", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid curly bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
                 
                 index = min(int(progress), len(parts) - 1)
                 part = parts[index]
@@ -365,6 +369,12 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                     else:
                         parts.append(text[splits[k-1][0]+1:splits[k][0]])
                 parts.append(text[splits[-1][0]+1:end])
+                for k in range(len(parts)):
+                    if re.match(r"'\d+", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
                 
                 part = rand.choice(parts)
                 text = text[:start] + part + text[end+1:]
@@ -421,7 +431,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                     if is_step and step <= weight:
                         part = parts[k]
                         break
-                    if not is_step and progress <= weight:
+                    if not is_step and progress < weight:
                         part = parts[k]
                         break
                     
