@@ -448,4 +448,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
             pipes = 0
             colons = 0
     
+    if (depth != 0):
+        raise ValueError("Invalid syntax: mismatched brackets")
+    
     return text

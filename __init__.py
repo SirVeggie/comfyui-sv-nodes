@@ -961,6 +961,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-MathAddInt"] = "Add Int"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class MathCompare:
     def __init__(self):
         pass
@@ -969,7 +970,7 @@ class MathCompare:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "number": ("INT,FLOAT", {"forceInput": True}),
+                "number": ("*", {"forceInput": True}),
                 "operator": ([">", "<", ">=", "<=", "==", "!="],),
                 "other": ("FLOAT", {"default": 0, "min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01}),
             }
@@ -3667,6 +3668,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-ApplyCurveFromStep"] = "Apply Curve from Step"
 
 #-------------------------------------------------------------------------------#
 
+@VariantSupport()
 class MathOperation:
     def __init__(self):
         pass
@@ -3678,8 +3680,8 @@ class MathOperation:
                 "op": ("STRING", {"multiline": False, "default": ""})
             },
             "optional": {
-                "a": ("INT,FLOAT",),
-                "b": ("INT,FLOAT",),
+                "a": ("*",),
+                "b": ("*",),
             }
         }
     
