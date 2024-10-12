@@ -21,9 +21,7 @@ See the [wiki](https://github.com/SirVeggie/comfyui-sv-nodes/wiki).
 
 ## Node list
 
-This list is out of date. :)
-
-### Vanilla nodes
+This list is very, very out of date. :)
 
 - Prompt Processing: see [style-vars](https://github.com/SirVeggie/extension-style-vars) extension for automatic1111
 - Resolution Selector
