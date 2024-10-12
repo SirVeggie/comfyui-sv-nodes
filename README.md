@@ -37,7 +37,6 @@ This list is out of date. :)
 
 ### Flow nodes
 
-- Prompt + Model: requires the caching improvements of flow control
 - Cache Shield: prevent a node from re-executing if inputs remain the same
 - Manual Cache: can keep an output in cache even if it changes later
 - Flow Block: prevent all subsequent nodes from executing, the input nodes are also not executed if not needed elsewhere
