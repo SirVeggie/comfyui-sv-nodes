@@ -3551,25 +3551,51 @@ def parseCurve(curve):
         curve = re.sub(r"\s+", "", curve)
         curve = collapseSigns(curve)
         while "(" in curve or ")" in curve:
-            curve = re.sub(r"\([^()]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
+            curve = re.sub(r"\([^(,)]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
+            curve = re.sub(r"\w+\([^()]+\)", lambda x : str(parseCurveFunction(x.group(0), t)), curve)
             curve = collapseSigns(curve)
-        parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?<!\*|/)(?=[-+])", curve))]
+        parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?<!\*|/|%)(?=[-+])", curve))]
         if len(parts) == 0:
             raise ValueError("Invalid curve: No parts found")
         sum = 0
         for part in parts:
-            subparts = re.split(r"(?<=[*/])|(?=[*/])", part)
+            subparts = re.split(r"(?<=[*/%])|(?=[*/%])", part)
             for i in range(len(subparts)):
-                if subparts[i] != "*" and subparts[i] != "/":
+                if subparts[i] != "*" and subparts[i] != "/" and subparts[i] != "%":
                     subparts[i] = parseCurvePart(subparts[i], t)
             for i in range(len(subparts)):
                 if subparts[i] == "*":
                     subparts[i+1] = subparts[i-1] * subparts[i+1]
                 if subparts[i] == "/":
                     subparts[i+1] = subparts[i-1] / subparts[i+1]
+                if subparts[i] == "%":
+                    subparts[i+1] = subparts[i-1] % subparts[i+1]
             sum += subparts[-1]
         return sum
     return partial(f, curve)
+
+def parseCurveFunction(func, t):
+    name = re.search(r"^\w+", func).group(0).lower()
+    func = re.sub(r"^\w+\(|\)", "", func)
+    parts: list[float] = [parseCurve(x)(t) for x in func.split(",")]
+    
+    if name == "min":
+        return min(parts)
+    if name == "max":
+        return max(parts)
+    if name == "floor":
+        return math.floor(parts[0])
+    if name == "ceil":
+        return math.ceil(parts[0])
+    if name == "sqrt":
+        return math.sqrt(parts[0])
+    if name == "clamp":
+        if len(parts) < 3:
+            raise ValueError("Clamp requires 3 arguments: clamp(x, min, max)")
+        if parts[1] > parts[2]:
+            parts[1], parts[2] = parts[2], parts[1]
+        return max(parts[1], min(parts[0], parts[2]))
+    raise ValueError("Invalid math function")
 
 def collapseSigns(curve):
     curve = re.sub(r"\+\+", "+", curve)
@@ -3699,9 +3725,9 @@ class MathOperation:
             raise ValueError("Invalid operation: Missing 'b' value")
         op = re.sub(r"\s+", "", op)
         op = re.sub(r"(?<=\d)a", "*" + str(a), op)
-        op = re.sub(r"a", str(a), op)
+        op = re.sub(r"\ba\b", str(a), op)
         op = re.sub(r"(?<=\d)b", "*" + str(b), op)
-        op = re.sub(r"b", str(b), op)
+        op = re.sub(r"\bb\b", str(b), op)
         result = parseCurve(op)(0)
         return math.floor(result), result
 
