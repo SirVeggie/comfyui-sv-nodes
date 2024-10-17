@@ -3870,6 +3870,147 @@ NODE_CLASS_MAPPINGS["SV-SwapValues"] = SwapValues
 NODE_DISPLAY_NAME_MAPPINGS["SV-SwapValues"] = "Swap"
 
 #-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class VariableSet:
+    storage = {}
+    
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "key": ("STRING",)
+            },
+            "optional": {
+                "signal": ("signal",),
+                "value": ("*",),
+                "set": ("BOOLEAN", {"defaultInput": True, "default": True})
+            }
+        }
+    
+    OUTPUT_NODE = True
+    RETURN_TYPES = ("signal", "STRING")
+    RETURN_NAMES = ("signal", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, value, key, set):
+        if set == False:
+            return (None, None)
+        if value is None:
+            del VariableSet.storage[key]
+            return (None, None)
+        VariableSet.storage[key] = value
+        return (None, value)
+    
+NODE_CLASS_MAPPINGS["SV-VariableSet"] = VariableSet
+NODE_DISPLAY_NAME_MAPPINGS["SV-VariableSet"] = "Var Set"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class VariableGet:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "key": ("STRING",)
+            },
+            "optional": {
+                "signal": ("signal",)
+            }
+        }
+    
+    RETURN_TYPES = ("signal", "*")
+    RETURN_NAMES = ("signal", "value")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, key, signal):
+        if key not in VariableSet.storage:
+            return (None, None)
+        return (None, VariableSet.storage[key])
+
+NODE_CLASS_MAPPINGS["SV-VariableGet"] = VariableGet
+NODE_DISPLAY_NAME_MAPPINGS["SV-VariableGet"] = "Var Get"
+
+#-------------------------------------------------------------------------------#
+
+class VariableClear:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "signal": ("signal",)
+            }
+        }
+    
+    RETURN_TYPES = ("signal",)
+    RETURN_NAMES = ("signal",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def run(self, signal):
+        VariableSet.storage = {}
+        return (None,)
+
+NODE_CLASS_MAPPINGS["SV-VariableClear"] = VariableClear
+NODE_DISPLAY_NAME_MAPPINGS["SV-VariableClear"] = "Var Clear"
+#-------------------------------------------------------------------------------#
+
+class EmptyValue:
+    def __init__(self):
+        pass
+
+@VariantSupport()
+class ValueRepeater:
+    savedValue = EmptyValue()
+    
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "value": ("*", {"lazy": True}),
+                "repeat": ("BOOLEAN", {"defaultInput": True})
+            }
+        }
+    
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("value",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Logic"
+    
+    def check_lazy_status(self, value, repeat):
+        if repeat and type(self.savedValue) is not EmptyValue:
+            return []
+        return ["value"]
+    
+    def run(self, value, repeat):
+        if repeat and type(self.savedValue) is not EmptyValue:
+            return (self.savedValue,)
+        self.savedValue = value
+        return (value,)
+
+NODE_CLASS_MAPPINGS["SV-ValueRepeater"] = ValueRepeater
+NODE_DISPLAY_NAME_MAPPINGS["SV-ValueRepeater"] = "Value Repeater"
+
+#-------------------------------------------------------------------------------#
 # Experiments
 
 # By Thyri on discord
