@@ -112,6 +112,8 @@ def clean_prompt(prompt: str):
     prompt = re.sub(r"\s*[\n\r,][,\s]*", ", ", prompt)
     prompt = re.sub(r"\s+", " ", prompt)
     return re.sub(r"[,\s]+$", "", prompt)
+def finalize_prompt(prompt: str):
+    return re.sub(r"\\:", ":", prompt)
 def remove_comments(prompt: str):
     # remove comments from prompt, accepts // and # comments
     lines = prompt.split("\n")
@@ -144,7 +146,7 @@ def process(prompt, output: int, variables: str, seed: int):
         previous_prompt = prompt
         depth += 1
     
-    return clean_prompt(prompt)
+    return finalize_prompt(clean_prompt(prompt))
 
 def log_error(message):
     return
@@ -195,7 +197,7 @@ def decode(text: str, output: int, seed: int):
                 end = i
         elif text[i] == '|' and depth == 1:
             splits.append(i)
-        elif text[i] == ':' and depth == 1:
+        elif text[i] == ':' and text[i-1] != '\\' and depth == 1:
             splits.append(i)
             mode = "hr"
         
@@ -285,7 +287,7 @@ def process_advanced(prompt, variables: str, seed: int, step: int, progress: flo
         previous_prompt = prompt
         depth += 1
     
-    return clean_prompt(prompt)
+    return finalize_prompt(clean_prompt(prompt))
 
 def decode_advanced(text: str, seed: int, step: int, progress: float):
     depth = 0
@@ -334,7 +336,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
         elif text[i] == '|' and depth == 1:
             splits.append((i, '|'))
             pipes += 1
-        elif text[i] == ':' and depth == 1:
+        elif text[i] == ':' and text[i-1] != '\\' and depth == 1:
             splits.append((i, ':'))
             colons += 1
         
