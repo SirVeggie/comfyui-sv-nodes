@@ -4,7 +4,7 @@ Currently includes simple nodes that I wanted for easier and more compact workfl
 
 ### Documentation
 
-See the [wiki](https://github.com/SirVeggie/comfyui-sv-nodes/wiki).
+Currently missing (contact me if you find 'em).
 
 ## Node list
 
