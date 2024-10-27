@@ -3551,8 +3551,8 @@ def parseCurve(curve):
         curve = re.sub(r"\s+", "", curve)
         curve = collapseSigns(curve)
         while "(" in curve or ")" in curve:
-            curve = re.sub(r"\([^(,)]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
             curve = re.sub(r"\w+\([^()]+\)", lambda x : str(parseCurveFunction(x.group(0), t)), curve)
+            curve = re.sub(r"\([^(,)]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
             curve = collapseSigns(curve)
         parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?<!\*|/|%)(?=[-+])", curve))]
         if len(parts) == 0:
