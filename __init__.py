@@ -586,7 +586,7 @@ class BasicParams:
             raise TypeError("Invalid denoise input type")
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
-        return ((cfg, steps, denoise, sampler, "normal", False),)
+        return ((cfg, steps, denoise, sampler, None, None, None, None),)
 
 NODE_CLASS_MAPPINGS["SV-BasicParams"] = BasicParams
 NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParams"] = "Params"
@@ -624,10 +624,51 @@ class BasicParamsPlus:
             raise TypeError("Invalid denoise input type")
         if not isinstance(sampler, str):
             raise TypeError("Invalid sampler input type")
-        return ((cfg, steps, denoise, sampler, scheduler, scheduler == "ays"),)
+        return ((cfg, steps, denoise, sampler, scheduler, scheduler == "ays", None, None),)
 
 NODE_CLASS_MAPPINGS["SV-BasicParamsPlus"] = BasicParamsPlus
 NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsPlus"] = "Params Plus"
+
+#-------------------------------------------------------------------------------#
+
+class BasicParamsStartEnd:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "cfg": ("FLOAT", {"min": 0, "max": 20, "step": 0.1, "default": 8.0}),
+                "steps": ("INT", {"min": 1, "max": 100, "step": 1, "default": 10}),
+                "sampler": (comfy.samplers.SAMPLER_NAMES,),
+                "scheduler": (comfy.samplers.SCHEDULER_NAMES + ["ays"],),
+                "start": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 0.0}),
+                "end": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 1.0}),
+            }
+        }
+    
+    RETURN_TYPES = ("BP_OUTPUT",)
+    RETURN_NAMES = ("packet",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    def run(self, cfg, steps, start, end, sampler, scheduler):
+        if not isinstance(cfg, float) and not isinstance(cfg, int):
+            raise TypeError("Invalid cfg input type")
+        if not isinstance(steps, int):
+            raise TypeError("Invalid steps input type")
+        if not isinstance(start, float) and not isinstance(start, int):
+            raise TypeError("Invalid start input type")
+        if not isinstance(end, float) and not isinstance(end, int):
+            raise TypeError("Invalid end input type")
+        if not isinstance(sampler, str):
+            raise TypeError("Invalid sampler input type")
+        return ((cfg, steps, None, sampler, scheduler, scheduler == "ays", start, end),)
+
+NODE_CLASS_MAPPINGS["SV-BasicParamsStartEnd"] = BasicParamsStartEnd
+NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsStartEnd"] = "Params Start/End"
 
 #-------------------------------------------------------------------------------#
 
@@ -662,7 +703,7 @@ class BasicParamsCustom:
             raise TypeError("Invalid sampler input type")
         if not isinstance(scheduler, str):
             raise TypeError("Invalid scheduler input type")
-        return ((cfg, steps, 1.0, sampler, scheduler, scheduler == "ays"),)
+        return ((cfg, steps, None, sampler, scheduler, scheduler == "ays", None, None),)
 
 NODE_CLASS_MAPPINGS["SV-BasicParamsCustom"] = BasicParamsCustom
 NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsCustom"] = "Params Custom"
@@ -681,8 +722,8 @@ class BasicParamsOutput:
             }
         }
     
-    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES, "BOOLEAN", "SAMPLER")
-    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler", "ays", "SAMPLER")
+    RETURN_TYPES = ("FLOAT", "INT", "FLOAT", comfy.samplers.SAMPLER_NAMES, comfy.samplers.SCHEDULER_NAMES, "BOOLEAN", "SAMPLER", "FLOAT", "FLOAT")
+    RETURN_NAMES = ("cfg", "steps", "denoise", "sampler", "scheduler", "ays", "SAMPLER", "start", "end")
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Input"
@@ -690,7 +731,7 @@ class BasicParamsOutput:
     def run(self, packet):
         if not isinstance(packet, tuple):
             raise TypeError("Invalid packet input type")
-        if len(packet) != 6:
+        if len(packet) != 8:
             raise ValueError("Invalid packet length")
         cfg = packet[0] or 8.0
         steps = packet[1] or 10
@@ -699,7 +740,9 @@ class BasicParamsOutput:
         sampler2 = comfy.samplers.sampler_object(sampler)
         scheduler = comfy.samplers.SCHEDULER_NAMES[0] if packet[4] in [None, "ays"] else packet[4]
         ays = packet[5] or False
-        return cfg, steps, denoise, sampler, scheduler, ays, sampler2
+        start = packet[6] or 0.0
+        end = packet[7] or 1.0
+        return cfg, steps, denoise, sampler, scheduler, ays, sampler2, start, end
 
 NODE_CLASS_MAPPINGS["SV-BasicParamsOutput"] = BasicParamsOutput
 NODE_DISPLAY_NAME_MAPPINGS["SV-BasicParamsOutput"] = "Params Output"
@@ -1265,6 +1308,7 @@ class SigmaAsFloat:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Sigmas"
+    DEPRECATED = True
     
     def run(self, sigmas):
         if len(sigmas) < 1:
@@ -1273,6 +1317,34 @@ class SigmaAsFloat:
 
 NODE_CLASS_MAPPINGS["SV-SigmaAsFloat"] = SigmaAsFloat
 NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaAsFloat"] = "Sigma As Float"
+
+#-------------------------------------------------------------------------------#
+
+class SigmaStartEnd:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT", "FLOAT")
+    RETURN_NAMES = ("start", "end")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas):
+        if len(sigmas) < 1:
+            raise ValueError("Invalid sigmas length")
+        return (sigmas[0].item(), sigmas[-1].item())
+
+NODE_CLASS_MAPPINGS["SV-SigmaStartEnd"] = SigmaStartEnd
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaStartEnd"] = "Sigma Start/End"
 
 #-------------------------------------------------------------------------------#
 
@@ -1299,6 +1371,34 @@ class SigmaLength:
 
 NODE_CLASS_MAPPINGS["SV-SigmaLength"] = SigmaLength
 NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaLength"] = "Sigma Length"
+
+#-------------------------------------------------------------------------------#
+
+class SigmaStrength:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("strength",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, model, sigmas):
+        sigma = (sigmas[0] - sigmas[-1]) / model.model.latent_format.scale_factor
+        return (sigma.item(),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaStrength"] = SigmaStrength
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaStrength"] = "Sigma Strength"
 
 #-------------------------------------------------------------------------------#
 

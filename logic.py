@@ -38,6 +38,8 @@ def calculate_sigma_range_percent(reference: list[float], start: float, end: flo
         lower_index = math.floor(approx)
         upper_index = math.ceil(approx)
         sigmas.append(reference[lower_index] + delta * (reference[upper_index] - reference[lower_index]))
+    if sigmas[0] == sigmas[-1]:
+        return [sigmas[0]]
     return sigmas
 
 #-------------------------------------------------------------------------------#
