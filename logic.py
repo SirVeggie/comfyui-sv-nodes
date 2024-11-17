@@ -30,6 +30,8 @@ def calculate_sigma_range(reference: list[float], start: float, end: float, step
     return calculate_sigma_range_percent(reference, start_percentage, end_percentage, steps)
 
 def calculate_sigma_range_percent(reference: list[float], start: float, end: float, steps: int):
+    if steps == 0:
+        return []
     sigmas = []
     dist = (end - start) / steps
     for i in range(steps + 1):
@@ -356,7 +358,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                         parts.append(text[splits[k-1][0]+1:splits[k][0]])
                 parts.append(text[splits[-1][0]+1:end])
                 for k in range(len(parts)):
-                    if re.match(r"'\d+", parts[k]) is not None:
+                    if re.match(r"'\d+$", parts[k]) is not None:
                         index = int(parts[k][1:]) - 1
                         if index < 0 or index >= len(parts) or index == k:
                             raise ValueError(f"Invalid curly bracket pointer {parts[k]} at {text[start:end+1]}")
@@ -374,7 +376,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                         parts.append(text[splits[k-1][0]+1:splits[k][0]])
                 parts.append(text[splits[-1][0]+1:end])
                 for k in range(len(parts)):
-                    if re.match(r"'\d+", parts[k]) is not None:
+                    if re.match(r"'\d+$", parts[k]) is not None:
                         index = int(parts[k][1:]) - 1
                         if index < 0 or index >= len(parts) or index == k:
                             raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
@@ -403,7 +405,7 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                     raise ValueError(f"Invalid square bracket content at {text[start:end+1]}")
                 parts = []
                 weights = []
-                if colons == 2 and text[splits[1][0]+1:end].replace(".", "", 1).isdigit():
+                if colons == 2 and not text[splits[0][0]+1:splits[1][0]].replace(".", "", 1).isdigit():
                     parts.append(text[start+1:splits[0][0]])
                     parts.append(text[splits[0][0]+1:splits[1][0]])
                     weight = text[splits[1][0]+1:end]
@@ -417,13 +419,14 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
                             parts.append(text[splits[index-1][0]+1:splits[index][0]])
                         weights.append(text[splits[index][0]+1:splits[index+1][0]])
                     parts.append(text[splits[-1][0]+1:end])
-                    for k in range(len(parts)):
-                        if re.match(r"'\d+", parts[k]) is not None:
-                            index = int(parts[k][1:]) - 1
-                            if index < 0 or index >= len(parts) or index == k:
-                                raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
-                            parts[k] = parts[index]
                     weights.append("end")
+                
+                for k in range(len(parts)):
+                    if re.match(r"'\d+$", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
                 
                 part = ""
                 for k in range(len(weights)):
