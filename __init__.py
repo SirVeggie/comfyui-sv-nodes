@@ -1402,6 +1402,65 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaStrength"] = "Sigma Strength"
 
 #-------------------------------------------------------------------------------#
 
+class SigmaReverse:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",)
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas):
+        out = sigmas.tolist()
+        if out[-1] == 0:
+            out[-1] = out[-1] + 0.0001
+        out.reverse()
+        return (torch.FloatTensor(out).cpu(),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaReverse"] = SigmaReverse
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaReverse"] = "Sigma Reverse"
+
+#-------------------------------------------------------------------------------#
+
+class NormalizeSamples:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "latent": ("LATENT",)
+            }
+        }
+    
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("normalized",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sampling"
+    
+    def run(self, latent):
+        samples = latent["samples"]
+        out = latent.copy()
+        out["samples"] = (samples - samples.mean()) / samples.std()
+        return (out,)
+
+NODE_CLASS_MAPPINGS["SV-NormalizeSamples"] = NormalizeSamples
+NODE_DISPLAY_NAME_MAPPINGS["SV-NormalizeSamples"] = "Normalize Samples"
+
+#-------------------------------------------------------------------------------#
+
 @VariantSupport()
 class ModelName:
     def __init__(self):
@@ -3687,6 +3746,8 @@ def parseCurveFunction(func, t):
         return math.floor(parts[0])
     if name == "ceil":
         return math.ceil(parts[0])
+    if name == "round":
+        return round(parts[0])
     if name == "sqrt":
         return math.sqrt(parts[0])
     if name == "clamp":
@@ -3695,6 +3756,11 @@ def parseCurveFunction(func, t):
         if parts[1] > parts[2]:
             parts[1], parts[2] = parts[2], parts[1]
         return max(parts[1], min(parts[0], parts[2]))
+    if name == "closest":
+        if len(parts) < 2:
+            raise ValueError("Closest requires at least 2 arguments: closest(x, args...)")
+        mapped = map(lambda x: { "i": x, "abs": abs(parts[0] - parts[x]) }, range(1, len(parts)))
+        return parts[min(mapped, key=lambda x: x["abs"])["i"]]
     raise ValueError("Invalid math function")
 
 def collapseSigns(curve):
@@ -3858,7 +3924,7 @@ class FloatRerouteForSubnodes:
         return (float,)
 
 NODE_CLASS_MAPPINGS["SV-FloatRerouteForSubnodes"] = FloatRerouteForSubnodes
-NODE_DISPLAY_NAME_MAPPINGS["SV-FloatRerouteForSubnodes"] = "Float"
+NODE_DISPLAY_NAME_MAPPINGS["SV-FloatRerouteForSubnodes"] = "Float Reroute"
 
 #-------------------------------------------------------------------------------#
 
@@ -4109,6 +4175,60 @@ class ValueRepeater:
 
 NODE_CLASS_MAPPINGS["SV-ValueRepeater"] = ValueRepeater
 NODE_DISPLAY_NAME_MAPPINGS["SV-ValueRepeater"] = "Value Repeater"
+
+#-------------------------------------------------------------------------------#
+
+class UnitFloat:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "float": ("FLOAT", {"min": 0, "max": 1, "step": 0.01, "default": 0.0})
+            }
+        }
+    
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("float",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    def run(self, float):
+        return (float,)
+
+NODE_CLASS_MAPPINGS["SV-UnitFloat"] = UnitFloat
+NODE_DISPLAY_NAME_MAPPINGS["SV-UnitFloat"] = "Unit Float"
+
+#-------------------------------------------------------------------------------#
+
+class MetadataJson:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "prompt": ("STRING", {"forceInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("json",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/IO"
+    
+    def run(self, prompt):
+        return (json.dumps({"extra": {
+            "prompt": prompt,
+        }}),)
+
+NODE_CLASS_MAPPINGS["SV-MetadataJson"] = MetadataJson
+NODE_DISPLAY_NAME_MAPPINGS["SV-MetadataJson"] = "Metadata Json"
 
 #-------------------------------------------------------------------------------#
 # Experiments
