@@ -87,6 +87,9 @@ def separate_lora(text: str):
     lora = "".join(re.findall(r"<l\w+:[^>]+>", text, re.IGNORECASE))
     return (prompt, lora)
 
+def unescape_prompt(text: str):
+    return re.sub(r"\\([<>\[\]|:])", r"\1", text)
+
 def parse_vars(variables: str):
     vars: dict[str, str] = {}
     lines = variables.split("\n")
@@ -459,3 +462,400 @@ def decode_advanced(text: str, seed: int, step: int, progress: float):
         raise ValueError("Invalid syntax: mismatched brackets")
     
     return text
+
+#-------------------------------------------------------------------------------#
+# Simple Prompt Processing
+
+def process_simple(prompt, variables: str, seed: int, hires: bool):
+    prompt = remove_comments(prompt)
+    prompt = clean_prompt(prompt)
+    
+    if len(prompt) == 0:
+        return prompt
+    
+    vars = parse_vars(variables)
+    names: list[str] = vars.keys()
+    names = sorted(names, key=len, reverse=True)
+    
+    depth = 0
+    previous_prompt = prompt
+    while depth < processing_depth:
+        prompt = decode_simple(prompt, seed, hires)
+        
+        for name in names:
+            if name not in prompt:
+                continue
+            
+            text = vars[name]
+            if " " not in name:
+                prompt = prompt.replace(f"{var_char}{name}", text)
+            prompt = prompt.replace(f"{var_char}({name})", text)
+        
+        if prompt == previous_prompt:
+            break
+        previous_prompt = prompt
+        depth += 1
+    
+    return finalize_prompt(clean_prompt(prompt))
+
+def decode_simple(text: str, seed: int, hires: bool):
+    depth = 0
+    start = -1
+    end = -1
+    mode = ""
+    splits = []
+    pipes = 0
+    colons = 0
+    rand = _random.Random(seed)
+    
+    if len(text) == 0:
+        return text
+    
+    brackets = []
+    i = -1
+    while i + 1 < len(text):
+        i += 1
+        
+        closing = is_closing(text, i) and not is_opening(text, i)
+        if closing and len(brackets) == 0:
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        if closing and brackets[-1][1] != get_pair(text[i], False):
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        closing = is_closing(text, i) and len(brackets) and brackets[-1][1] == get_pair(text[i], False)
+        opening = not closing and is_opening(text, i)
+        
+        if opening:
+            brackets.append((i, text[i]))
+            if depth == 0 and text[i] not in [char_pair[0]]:
+                continue
+            if depth == 0:
+                start = i
+                mode = "curly" if text[i] == char_pair[0] else "square"
+            depth += 1
+        elif closing:
+            prev = brackets.pop()
+            if prev[1] != get_pair(text[i], False):
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth == 1 and text[i] in [char_pair[1]] and start != -1:
+                end = i
+            if depth <= 0 and text[i] in [char_pair[1]]:
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth > 0:
+                depth -= 1
+        elif text[i] == '|' and depth == 1:
+            splits.append((i, '|'))
+            pipes += 1
+        elif text[i] == ':' and text[i-1] != '\\' and depth == 1:
+            splits.append((i, ':'))
+            colons += 1
+        
+        if end != -1:
+            if mode == "curly" and pipes + colons == 0:
+                text = text[:start] + text[start+1:end] + text[end+1:]
+            elif mode == "curly" and colons > 0 and pipes > 0:
+                raise ValueError(f"Invalid curly bracket content at {text[start:end+1]}")
+            elif mode == "curly" and colons > 0:
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                for k in range(len(parts)):
+                    if re.match(r"'\d+$", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid curly bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
+                
+                index = min(1 if hires else 0, len(parts) - 1)
+                part = parts[index]
+                text = text[:start] + part + text[end+1:]
+            elif mode == "curly" and pipes > 0:
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                for k in range(len(parts)):
+                    if re.match(r"'\d+$", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
+                
+                part = rand.choice(parts)
+                text = text[:start] + part + text[end+1:]
+                
+            else:
+                raise ValueError("Unexpected bracket evaluation")
+            
+            i = start - 1
+            start = -1
+            end = -1
+            splits = []
+            mode = ""
+            pipes = 0
+            colons = 0
+    
+    if (depth != 0):
+        raise ValueError("Invalid syntax: mismatched brackets")
+    
+    return text
+
+#-------------------------------------------------------------------------------#
+# Prompt Control Prompt Processing
+
+def process_control(prompt: str, steps: int, phase: int, variables: str, seed: int):
+    prompt = remove_comments(prompt)
+    prompt = clean_prompt(prompt)
+    
+    if len(prompt) == 0:
+        return prompt
+    
+    vars = parse_vars(variables)
+    names: list[str] = vars.keys()
+    names = sorted(names, key=len, reverse=True)
+    
+    depth = 0
+    previous_prompt = prompt
+    while depth < processing_depth:
+        prompt = decode_control(prompt, steps, phase, seed)
+        
+        for name in names:
+            if name not in prompt:
+                continue
+            
+            text = vars[name]
+            if " " not in name:
+                prompt = prompt.replace(f"{var_char}{name}", text)
+            prompt = prompt.replace(f"{var_char}({name})", text)
+        
+        if prompt == previous_prompt:
+            break
+        previous_prompt = prompt
+        depth += 1
+    
+    return finalize_prompt(clean_prompt(prompt))
+
+def decode_control(text: str, steps: int, phase: int, seed: int):
+    depth = 0
+    start = -1
+    end = -1
+    mode = ""
+    splits = []
+    pipes = 0
+    colons = 0
+    rand = _random.Random(seed)
+    
+    if len(text) == 0:
+        return text
+    
+    brackets = []
+    i = -1
+    while i + 1 < len(text):
+        i += 1
+        
+        closing = is_closing(text, i) and not is_opening(text, i)
+        if closing and len(brackets) == 0:
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        if closing and brackets[-1][1] != get_pair(text[i], False):
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        closing = is_closing(text, i) and len(brackets) and brackets[-1][1] == get_pair(text[i], False)
+        opening = not closing and is_opening(text, i)
+        
+        if opening:
+            brackets.append((i, text[i]))
+            if depth == 0 and text[i] not in [char_pair[0], adv_char_pair[0]]:
+                continue
+            if depth == 0:
+                start = i
+                mode = "curly" if text[i] == char_pair[0] else "square"
+            depth += 1
+        elif closing:
+            prev = brackets.pop()
+            if prev[1] != get_pair(text[i], False):
+                raise ValueError(f"Invalid bracket pair when closing: {text[i]} at {error_context(text, i)}")
+            if depth == 1 and text[i] in [char_pair[1], adv_char_pair[1]] and start != -1:
+                end = i
+            # if depth <= 0 and text[i] in [char_pair[1], adv_char_pair[1]]:
+            #     raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth > 0:
+                depth -= 1
+        elif text[i] == '|' and depth == 1:
+            splits.append((i, '|'))
+            pipes += 1
+        elif text[i] == ':' and text[i-1] != '\\' and depth == 1:
+            splits.append((i, ':'))
+            colons += 1
+        
+        if end == -1:
+            continue
+        
+        if mode == "curly" and pipes + colons == 0:
+            text = text[:start] + text[start+1:end] + text[end+1:]
+        elif mode == "curly" and colons > 0 and pipes > 0:
+            raise ValueError(f"Invalid curly bracket content at {text[start:end+1]}")
+        elif mode == "curly" and colons > 0:
+            parts = []
+            for k in range(len(splits)):
+                if k == 0:
+                    parts.append(text[start+1:splits[k][0]])
+                else:
+                    parts.append(text[splits[k-1][0]+1:splits[k][0]])
+            parts.append(text[splits[-1][0]+1:end])
+            for k in range(len(parts)):
+                if re.match(r"'\d+$", parts[k]) is not None:
+                    index = int(parts[k][1:]) - 1
+                    if index < 0 or index >= len(parts) or index == k:
+                        raise ValueError(f"Invalid curly bracket pointer {parts[k]} at {text[start:end+1]}")
+                    parts[k] = parts[index]
+            
+            index = min(phase - 1, len(parts) - 1)
+            part = parts[index]
+            text = text[:start] + part + text[end+1:]
+        elif mode == "curly" and pipes > 0:
+            parts = []
+            for k in range(len(splits)):
+                if k == 0:
+                    parts.append(text[start+1:splits[k][0]])
+                else:
+                    parts.append(text[splits[k-1][0]+1:splits[k][0]])
+            parts.append(text[splits[-1][0]+1:end])
+            for k in range(len(parts)):
+                if re.match(r"'\d+$", parts[k]) is not None:
+                    index = int(parts[k][1:]) - 1
+                    if index < 0 or index >= len(parts) or index == k:
+                        raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                    parts[k] = parts[index]
+            
+            part = rand.choice(parts)
+            text = text[:start] + part + text[end+1:]
+        
+        elif mode == "square" and text[start+1:end].startswith("SEQ"):
+            brackets.append((start, "["))
+            start += 1
+        elif mode == "square" and pipes + colons == 0:
+            text = text[:start] + text[start+1:end] + text[end+1:]
+        elif mode == "square" and pipes > 0 and colons > 0:
+            brackets.append((start, "["))
+            start += 1
+        elif mode == "square" and pipes > 0:
+            text = text[:end] + ":" + str(1.0 / steps) + text[end:]
+            brackets.append((start, "["))
+            start += 1
+        elif mode == "square" and colons == 1:
+            left = text[start+1:splits[0][0]]
+            right = text[splits[0][0]+1:end]
+            if (not left.replace(".", "").isdigit() or not right.replace(".", "").isdigit()):
+                raise ValueError(f"Invalid square bracket content at {text[start:end+1]}: '{left}' or '{right}' is not a number")
+            left = float(left)
+            right = float(right)
+            part = "SEQ"
+            delta = right - left
+            for k in range(steps - 1):
+                part += ":" + str(left + delta * (k / (steps - 1)))[:5] + ":" + str((k + 1) / steps)
+            part += ":" + str(right) + ":1.0"
+            text = text[:start+1] + part + text[end:]
+            brackets.append((start, "["))
+            start += 1
+        elif mode == "square" and colons > 0:
+            if colons % 2 != 0:
+                raise ValueError(f"Invalid square bracket content at {text[start:end+1]}: invalid number of colons ({colons})")
+            
+            # build part and timing lists
+            parts = []
+            weights = []
+            if colons == 2 and not text[splits[0][0]+1:splits[1][0]].replace(".", "", 1).isdigit():
+                parts.append(text[start+1:splits[0][0]])
+                parts.append(text[splits[0][0]+1:splits[1][0]])
+                weight = text[splits[1][0]+1:end]
+                weights = [float(weight), 9999]
+            else:
+                for k in range(int(len(splits) / 2)):
+                    index = k * 2
+                    if index == 0:
+                        parts.append(text[start+1:splits[index][0]])
+                    else:
+                        parts.append(text[splits[index-1][0]+1:splits[index][0]])
+                    weights.append(float(text[splits[index][0]+1:splits[index+1][0]]))
+                parts.append(text[splits[-1][0]+1:end])
+                weights.append(9999)
+            
+            # expand pointers ('1, '2, etc)
+            for k in range(len(parts)):
+                if re.match(r"'\d+$", parts[k]) is not None:
+                    index = int(parts[k][1:]) - 1
+                    if index < 0 or index >= len(parts) or index == k:
+                        raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                    parts[k] = parts[index]
+            
+            # build SEQ
+            part = "SEQ"
+            partCount = 0
+            latestPart = ""
+            for k in range(len(weights)):
+                if weights[k] > phase - 1 and (k <= 0 or weights[k-1] < phase):
+                    partCount += 1
+                    latestPart = parts[k]
+                    part += ":" + parts[k] + ":"
+                    part += (str(min(1.0, weights[k] - (phase - 1))) if weights[k] != 9999 else "1.0")
+            
+            # remove SEQ if only one part
+            if partCount == 1:
+                part = latestPart
+            text = text[:start+1] + part + text[end:]
+            brackets.append((start, "["))
+            start += 1
+            
+        else:
+            raise ValueError("Unexpected bracket evaluation")
+        
+        i = start - 1
+        start = -1
+        end = -1
+        splits = []
+        mode = ""
+        pipes = 0
+        colons = 0
+    
+    if (depth != 0):
+        raise ValueError("Invalid syntax: mismatched brackets")
+    
+    return text
+
+#-------------------------------------------------------------------------------#
+# Variable Only Prompt Processing
+
+def process_vars(prompt, variables: str):
+    prompt = remove_comments(prompt)
+    prompt = clean_prompt(prompt)
+    
+    if len(prompt) == 0:
+        return prompt
+    
+    vars = parse_vars(variables)
+    names: list[str] = vars.keys()
+    names = sorted(names, key=len, reverse=True)
+    
+    depth = 0
+    previous_prompt = prompt
+    while depth < processing_depth:
+        for name in names:
+            if name not in prompt:
+                continue
+            
+            text = vars[name]
+            if " " not in name:
+                prompt = prompt.replace(f"{var_char}{name}", text)
+            prompt = prompt.replace(f"{var_char}({name})", text)
+        
+        if prompt == previous_prompt:
+            break
+        previous_prompt = prompt
+        depth += 1
+    
+    return finalize_prompt(clean_prompt(prompt))

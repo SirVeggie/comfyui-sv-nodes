@@ -3,7 +3,7 @@ import time
 import copy
 import comfy.samplers
 import folder_paths
-from .logic import calculate_sigma_range, calculate_sigma_range_percent, default, needs_seed, process, process_advanced, remove_comments, separate_lora, separate_lora_advanced
+from .logic import calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, needs_seed, process, process_advanced, process_simple, process_control, process_vars, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
 import node_helpers
 import hashlib
 import math
@@ -221,6 +221,7 @@ class PromptProcessingAdvanced:
         parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
         full_positive = parts[0]
         full_negative = parts[1] if len(parts) > 1 else ""
+        variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
         
         result = []
         
@@ -295,6 +296,7 @@ class PromptProcessingEncode:
             del PromptProcessingEncode.cache[item[0]]
 
 def encode(clip, text):
+    text = unescape_prompt(text)
     tokens = clip.tokenize(text)
     output = clip.encode_from_tokens(tokens, return_pooled=True, return_dict=True)
     cond = output.pop("cond")
@@ -371,6 +373,187 @@ class PromptProcessingGetCond:
 
 NODE_CLASS_MAPPINGS["SV-PromptProcessingGetCond"] = PromptProcessingGetCond
 NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingGetCond"] = "Get Conditioning"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingSimple:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"forceInput": True}),
+            },
+            "optional": {
+                "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True, "lazy": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("pos 1", "neg 1", "pos 2", "neg 2")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def check_lazy_status(self, prompt, **kwargs):
+        if needs_seed(prompt):
+            return ["seed"]
+        return []
+    
+    def run(self, prompt, variables="", seed=1):
+        prompt = remove_comments(prompt)
+        parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
+        full_positive = parts[0]
+        full_negative = parts[1] if len(parts) > 1 else ""
+        variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
+        
+        pos1 = process_simple(full_positive, variables, seed, False)
+        neg1 = process_simple(full_negative, variables, seed, False)
+        pos2 = process_simple(full_positive, variables, seed, True)
+        neg2 = process_simple(full_negative, variables, seed, True)
+        
+        return (pos1, neg1, pos2, neg2)
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingSimple"] = PromptProcessingSimple
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingSimple"] = "Simple Processing"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingPromptControl:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"forceInput": True}),
+                "steps": ("INT", {"forceInput": True}),
+            },
+            "optional": {
+                "phase": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
+                "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True, "lazy": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("positive", "negative")
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def check_lazy_status(self, prompt, **kwargs):
+        if needs_seed(prompt):
+            return ["seed"]
+        return []
+    
+    def run(self, prompt, steps, phase=1, variables="", seed=1):
+        prompt = remove_comments(prompt)
+        parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
+        full_positive = parts[0]
+        full_negative = parts[1] if len(parts) > 1 else ""
+        variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
+        
+        pos = process_control(full_positive, steps, phase, variables, seed)
+        neg = process_control(full_negative, steps, phase, variables, seed)
+        
+        return (pos, neg)
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingPromptControl"] = PromptProcessingPromptControl
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingPromptControl"] = "Control Processing"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingVars:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"forceInput": True}),
+            },
+            "optional": {
+                "variables": ("STRING", {"forceInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("output",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, prompt, variables=""):
+        prompt = remove_comments(prompt)
+        parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
+        full_positive = parts[0]
+        variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
+        
+        expanded = process_vars(prompt, variables)
+        
+        return (expanded,)
+
+NODE_CLASS_MAPPINGS["SV-PromptProcessingVars"] = PromptProcessingVars
+NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingVars"] = "Variable Processing"
+
+#-------------------------------------------------------------------------------#
+
+class PromptProcessingWildcards:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"forceInput": True}),
+                "wildcards": ("wildcards",),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("output",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def run(self, prompt, wildcards):
+        None
+
+#NODE_CLASS_MAPPINGS["SV-PromptProcessingWildcards"] = PromptProcessingWildcards
+#NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingWildcards"] = "Wildcard Processing"
+
+#-------------------------------------------------------------------------------#
+
+class LoadWildcards:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "dir_path": ("STRING",)
+            }
+        }
+    
+    RETURN_TYPES = ("wildcards",)
+    RETURN_NAMES = ("wildcards",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/IO"
+    
+    def run(self, dir_path):
+        None
+
+#NODE_CLASS_MAPPINGS["SV-LoadWildcards"] = LoadWildcards
+#NODE_DISPLAY_NAME_MAPPINGS["SV-LoadWildcards"] = "Load Wildcards"
 
 #-------------------------------------------------------------------------------#
 
@@ -4006,6 +4189,32 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-ConditioningReroute"] = "Conditioning Reroute"
 
 #-------------------------------------------------------------------------------#
 
+class ImageReroute:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",)
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(self, image):
+        return (image,)
+
+NODE_CLASS_MAPPINGS["SV-ImageReroute"] = ImageReroute
+NODE_DISPLAY_NAME_MAPPINGS["SV-ImageReroute"] = "Image Reroute"
+
+#-------------------------------------------------------------------------------#
+
 @VariantSupport()
 class SwapValues:
     def __init__(self):
@@ -4229,6 +4438,43 @@ class MetadataJson:
 
 NODE_CLASS_MAPPINGS["SV-MetadataJson"] = MetadataJson
 NODE_DISPLAY_NAME_MAPPINGS["SV-MetadataJson"] = "Metadata Json"
+
+#-------------------------------------------------------------------------------#
+
+class PadImage:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "padding": ("INT", {"default": 32, "min": 0, "max": 9999, "step": 1}),
+                "color": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.01}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/image"
+
+    def run(self, image, padding, color):
+        d1, d2, d3, d4 = image.size()
+
+        new_image = torch.ones(
+            (d1, d2 + padding * 2, d3 + padding * 2, d4),
+            dtype=torch.float32,
+        ) * color
+
+        new_image[:, padding:padding + d2, padding:padding + d3, :] = image
+
+        return (new_image,)
+
+NODE_CLASS_MAPPINGS["SV-PadImage"] = PadImage
+NODE_DISPLAY_NAME_MAPPINGS["SV-PadImage"] = "Pad Image"
 
 #-------------------------------------------------------------------------------#
 # Experiments
