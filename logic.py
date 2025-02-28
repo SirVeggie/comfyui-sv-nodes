@@ -747,11 +747,14 @@ def decode_control(text: str, steps: int, phase: int, seed: int):
             text = text[:end] + ":" + str(1.0 / steps) + text[end:]
             brackets.append((start, "["))
             start += 1
-        elif mode == "square" and colons == 1:
+        elif mode == "square" and colons == 1 and not text[start+1:splits[0][0]].replace(".", "").isdigit() and not text[splits[0][0]+1:end].replace(".", "").isdigit():
             left = text[start+1:splits[0][0]]
             right = text[splits[0][0]+1:end]
-            if (not left.replace(".", "").isdigit() or not right.replace(".", "").isdigit()):
-                raise ValueError(f"Invalid square bracket content at {text[start:end+1]}: '{left}' or '{right}' is not a number")
+            part = f"{left}:0.333:({left}, {right}:0.5):0.666:{right}";
+            text = text[:start+1] + part + text[end:]
+        elif mode == "square" and colons == 1 and text[start+1:splits[0][0]].replace(".", "").isdigit() and text[splits[0][0]+1:end].replace(".", "").isdigit():
+            left = text[start+1:splits[0][0]]
+            right = text[splits[0][0]+1:end]
             left = float(left)
             right = float(right)
             part = "SEQ"
@@ -762,6 +765,9 @@ def decode_control(text: str, steps: int, phase: int, seed: int):
             text = text[:start+1] + part + text[end:]
             brackets.append((start, "["))
             start += 1
+        elif mode == "square" and colons == 1:
+            reason = f"syntax [number:number] and [prompt:prompt] can't mix between numbers and prompts"
+            raise ValueError(f"Invalid square bracket content at {text[start:end+1]}: {reason}")
         elif mode == "square" and colons > 0:
             if colons % 2 != 0:
                 raise ValueError(f"Invalid square bracket content at {text[start:end+1]}: invalid number of colons ({colons})")

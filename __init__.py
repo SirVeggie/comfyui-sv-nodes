@@ -2627,33 +2627,26 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-AccumulationSetItemNode"] = "Accumulation Set Ite
 #-------------------------------------------------------------------------------#
 
 @VariantSupport()
-class CacheShield:
-    def __init__(self):
+class HashObject:
+    def __init__(s):
         pass
     
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "any": ("*",)
+                "obj": ("*",)
             }
         }
     
-    RETURN_TYPES = ("*",)
-    RETURN_NAMES = ("any",)
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("hash",)
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Flow"
     
-    def run(self, any):
-        return (any,)
-    
-    @classmethod
-    def IS_CACHED(s, any):
-        try:
-            return hash_item(any)
-        except:
-            return ""
+    def run(s, obj):
+        return (hash_item(obj),)
 
 def hash_item(item):
     if isinstance(item, (tuple, list)):
@@ -2674,8 +2667,45 @@ def hash_item(item):
         else:
             return hashlib.md5(repr(item).encode()).hexdigest()
 
-# NODE_CLASS_MAPPINGS["SV-CacheShield"] = CacheShield
-# NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShield"] = "Cache Shield"
+NODE_CLASS_MAPPINGS["SV-HashObject"] = HashObject
+NODE_DISPLAY_NAME_MAPPINGS["SV-HashObject"] = "Hash Object"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class HashItems:
+    def __init__(s):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "_1_": ("*",),
+                "_2_": ("*",),
+                "_3_": ("*",),
+                "_4_": ("*",),
+                "_5_": ("*",),
+                "_6_": ("*",),
+                "_7_": ("*",),
+                "_8_": ("*",),
+                "_9_": ("*",),
+                "_10_": ("*",),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("hash",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    
+    def run(s, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None, _6_=None, _7_=None, _8_=None, _9_=None, _10_=None):
+        args = [_1_, _2_, _3_, _4_, _5_, _6_, _7_, _8_, _9_, _10_]
+        return (hash_item(args),)
+
+NODE_CLASS_MAPPINGS["SV-HashItems"] = HashItems
+NODE_DISPLAY_NAME_MAPPINGS["SV-HashItems"] = "Hash Items"
 
 #-------------------------------------------------------------------------------#
 
@@ -2706,74 +2736,113 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-HashModel"] = "Hash Model"
 #-------------------------------------------------------------------------------#
 
 @VariantSupport()
-class CacheShieldProxy:
-    def __init__(self):
-        pass
+class CacheObject:
+    hashes = {}
+    obj = None
     
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "check": ("*",)
-            },
-            "optional": {
-                "_1_": ("*",),
-                "_2_": ("*",),
-                "_3_": ("*",),
-                "_4_": ("*",),
-                "_5_": ("*",)
-            }
-        }
-    
-    RETURN_TYPES = ("*", "*", "*", "*", "*")
-    RETURN_NAMES = ("_1_", "_2_", "_3_", "_4_", "_5_")
-    
-    FUNCTION = "run"
-    CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, check, _1_=None, _2_=None, _3_=None, _4_=None, _5_=None):
-        return (_1_, _2_, _3_, _4_, _5_)
-    
-    @classmethod
-    def IS_CACHED(s, check, **kwargs):
-        return CacheShield.IS_CACHED(s, check)
-
-# NODE_CLASS_MAPPINGS["SV-CacheShieldProxy"] = CacheShieldProxy
-# NODE_DISPLAY_NAME_MAPPINGS["SV-CacheShieldProxy"] = "Cache Proxy"
-
-#-------------------------------------------------------------------------------#
-
-@VariantSupport()
-class FlowManualCache:
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "any": ("*",),
-                "enabled": ("BOOLEAN", {"default": False}),
+                "any": ("*", {"lazy": True}),
+                "hash": ("STRING", {"forceInput": True}),
+                "id": ("STRING",)
             }
         }
     
     RETURN_TYPES = ("*",)
-    RETURN_NAMES = ("any",)
+    RETURN_NAMES = ("cache",)
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Flow"
-    
-    def run(self, any, enabled):
-        return (any,)
+    NOT_IDEMPOTENT = True
     
     @classmethod
-    def IS_CONTROLLED(s, any, enabled):
-        if enabled:
-            return "cached"
-        return None
+    def check_lazy_status(self, hash, id, **kwargs):
+        if CacheObject.hashes.get(id) is not None and CacheObject.hashes.get(id) == hash:
+            return []
+        return ["any"]
+    
+    def run(self, any, hash, id):
+        if self.obj is not None and CacheObject.hashes.get(id) is not None and CacheObject.hashes.get(id) == hash:
+            return (self.obj,)
+        CacheObject.hashes[id] = hash
+        self.obj = any
+        return (any,)
 
-# NODE_CLASS_MAPPINGS["SV-FlowManualCache"] = FlowManualCache
-# NODE_DISPLAY_NAME_MAPPINGS["SV-FlowManualCache"] = "Manual Cache"
+NODE_CLASS_MAPPINGS["SV-CacheObject"] = CacheObject
+NODE_DISPLAY_NAME_MAPPINGS["SV-CacheObject"] = "Cache Object"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ManualCache:
+    hasValue = {}
+    obj = None
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": ("*", {"lazy": True}),
+                "enable": ("BOOLEAN", {"forceInput": True}),
+                "id": ("STRING",),
+            }
+        }
+    
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("cache",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    NOT_IDEMPOTENT = True
+    
+    @classmethod
+    def check_lazy_status(self, enable, id, **kwargs):
+        if (id is None or id == "") and enable:
+            return []
+        if enable and ManualCache.hasValue.get(id):
+            return []
+        return ["any"]
+    
+    def run(self, any, enable, id):
+        if enable and self.obj is not None:
+            return (self.obj,)
+        if any is None:
+            del ManualCache.hasValue[id]
+        self.obj = any
+        ManualCache.hasValue[id] = True
+        return (any,)
+
+NODE_CLASS_MAPPINGS["SV-ManualCache"] = ManualCache
+NODE_DISPLAY_NAME_MAPPINGS["SV-ManualCache"] = "Manual Cache"
+
+#-------------------------------------------------------------------------------#
+
+@VariantSupport()
+class ClearCustomCaches:
+    id = None
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {}
+    
+    RETURN_TYPES = ()
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Flow"
+    NOT_IDEMPOTENT = True
+    OUTPUT_NODE = True
+    
+    def run(self):
+        if self.id is None:
+            self.id = round(time.time() * 1000)
+            VariableSet.storage = {}
+            CacheObject.hashes = {}
+            ManualCache.hasValue = {}
+        return (None,)
+
+NODE_CLASS_MAPPINGS["SV-ClearCustomCaches"] = ClearCustomCaches
+NODE_DISPLAY_NAME_MAPPINGS["SV-ClearCustomCaches"] = "Clear Caches"
 
 #-------------------------------------------------------------------------------#
 
@@ -3516,7 +3585,7 @@ class DefaultInt:
         return {
             "required": {
                 "any": ("*",),
-                "default": ("INT", {"min": -sys.maxsize, "max": sys.maxsize, "step": 1, "default": 0})
+                "default": ("INT", {"min": -sys.maxsize, "max": sys.maxsize, "step": 1, "default": 0, "lazy": True})
             }
         }
     
@@ -3525,6 +3594,12 @@ class DefaultInt:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
+    
+    @classmethod
+    def check_lazy_status(self, any, **kwargs):
+        if any is None:
+            return ["default"]
+        return []
     
     def run(self, any, default):
         if any is None or not isinstance(any, int):
@@ -3546,7 +3621,7 @@ class DefaultFloat:
         return {
             "required": {
                 "any": ("*",),
-                "default": ("FLOAT", {"min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01, "default": 0.0})
+                "default": ("FLOAT", {"min": -sys.float_info.max, "max": sys.float_info.max, "step": 0.01, "default": 0.0, "lazy": True})
             }
         }
     
@@ -3555,6 +3630,12 @@ class DefaultFloat:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
+    
+    @classmethod
+    def check_lazy_status(self, any, **kwargs):
+        if any is None:
+            return ["default"]
+        return []
     
     def run(self, any, default):
         if any is None or not isinstance(any, float):
@@ -3576,7 +3657,7 @@ class DefaultString:
         return {
             "required": {
                 "any": ("*",),
-                "default": ("STRING", {"multiline": False, "default": ""})
+                "default": ("STRING", {"multiline": False, "default": "", "lazy": True})
             }
         }
     
@@ -3585,6 +3666,12 @@ class DefaultString:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
+    
+    @classmethod
+    def check_lazy_status(self, any, **kwargs):
+        if any is None:
+            return ["default"]
+        return []
     
     def run(self, any, default):
         if any is None or not isinstance(any, str):
@@ -3606,7 +3693,7 @@ class DefaultBoolean:
         return {
             "required": {
                 "any": ("*",),
-                "default": ("BOOLEAN", {"default": False})
+                "default": ("BOOLEAN", {"default": False, "lazy": True})
             }
         }
     
@@ -3615,6 +3702,12 @@ class DefaultBoolean:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
+    
+    @classmethod
+    def check_lazy_status(self, any, **kwargs):
+        if any is None:
+            return ["default"]
+        return []
     
     def run(self, any, default):
         if any is None or not isinstance(any, bool):
@@ -3636,7 +3729,7 @@ class DefaultValue:
         return {
             "required": {
                 "any": ("*",),
-                "default": ("*",)
+                "default": ("*", {"lazy": True}),
             }
         }
     
@@ -3645,6 +3738,12 @@ class DefaultValue:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Logic"
+    
+    @classmethod
+    def check_lazy_status(self, any, **kwargs):
+        if any is None:
+            return ["default"]
+        return []
     
     def run(self, any, default):
         if any is None:
