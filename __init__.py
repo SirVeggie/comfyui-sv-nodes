@@ -497,7 +497,7 @@ class PromptProcessingVars:
         variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
         
         if len(parts) <= 1:
-            return (process_vars(parts[0], variables, seed))
+            return (process_vars(parts[0], variables, seed),)
         parts[0] = process_vars(parts[0], variables, seed)
         parts[1] = process_vars(parts[1], variables, seed)
         

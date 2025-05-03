@@ -926,10 +926,13 @@ def decode_randoms(text: str, seed: int):
         if end != -1:
             if mode == "curly" and pipes + colons == 0:
                 text = set_temp(text, end, "!CR!")
+                start += 1
             elif mode == "curly" and colons > 0 and pipes > 0:
                 text = set_temp(text, end, "!CR!")
+                start += 1
             elif mode == "curly" and colons > 0:
                 text = set_temp(text, end, "!CR!")
+                start += 1
             elif mode == "curly" and pipes > 0:
                 parts = []
                 for k in range(len(splits)):
