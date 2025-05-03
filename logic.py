@@ -119,6 +119,10 @@ def clean_prompt(prompt: str):
     prompt = re.sub(r"\s*[\n\r,][,\s]*", ", ", prompt)
     prompt = re.sub(r"\s+", " ", prompt)
     return re.sub(r"[,\s]+$", "", prompt)
+def clean_prompt_light(prompt: str):
+    prompt = re.sub(r" *(\n\r?){2,} *", "\n\n", prompt)
+    prompt = re.sub(r" +", " ", prompt)
+    return re.sub(r"[,\s]+$", "", prompt)
 def finalize_prompt(prompt: str):
     return re.sub(r"\\:", ":", prompt)
 def remove_comments(prompt: str):
@@ -836,9 +840,9 @@ def decode_control(text: str, steps: int, phase: int, seed: int):
 #-------------------------------------------------------------------------------#
 # Variable Only Prompt Processing
 
-def process_vars(prompt, variables: str):
+def process_vars(prompt, variables: str, seed: int):
     prompt = remove_comments(prompt)
-    prompt = clean_prompt(prompt)
+    prompt = clean_prompt_light(prompt)
     
     if len(prompt) == 0:
         return prompt
@@ -850,6 +854,8 @@ def process_vars(prompt, variables: str):
     depth = 0
     previous_prompt = prompt
     while depth < processing_depth:
+        prompt = decode_randoms(prompt, seed)
+        
         for name in names:
             if name not in prompt:
                 continue
@@ -864,4 +870,102 @@ def process_vars(prompt, variables: str):
         previous_prompt = prompt
         depth += 1
     
-    return finalize_prompt(clean_prompt(prompt))
+    return finalize_prompt(clean_prompt_light(prompt))
+
+def decode_randoms(text: str, seed: int):
+    depth = 0
+    start = -1
+    end = -1
+    mode = ""
+    splits = []
+    pipes = 0
+    colons = 0
+    rand = _random.Random(seed)
+    
+    if len(text) == 0:
+        return text
+    
+    brackets = []
+    i = -1
+    while i + 1 < len(text):
+        i += 1
+        
+        closing = is_closing(text, i) and not is_opening(text, i)
+        if closing and len(brackets) == 0:
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        if closing and brackets[-1][1] != get_pair(text[i], False):
+            raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+        closing = is_closing(text, i) and len(brackets) and brackets[-1][1] == get_pair(text[i], False)
+        opening = not closing and is_opening(text, i)
+        
+        if opening:
+            brackets.append((i, text[i]))
+            if depth == 0 and text[i] not in [char_pair[0]]:
+                continue
+            if depth == 0:
+                start = i
+                mode = "curly" if text[i] == char_pair[0] else "square"
+            depth += 1
+        elif closing:
+            prev = brackets.pop()
+            if prev[1] != get_pair(text[i], False):
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth == 1 and text[i] in [char_pair[1]] and start != -1:
+                end = i
+            if depth <= 0 and text[i] in [char_pair[1]]:
+                raise ValueError(f"Invalid bracket closing: {text[i]} at {error_context(text, i)}")
+            if depth > 0:
+                depth -= 1
+        elif text[i] == '|' and depth == 1:
+            splits.append((i, '|'))
+            pipes += 1
+        elif text[i] == ':' and text[i-1] != '\\' and depth == 1:
+            splits.append((i, ':'))
+            colons += 1
+        
+        if end != -1:
+            if mode == "curly" and pipes + colons == 0:
+                text = set_temp(text, end, "!CR!")
+            elif mode == "curly" and colons > 0 and pipes > 0:
+                text = set_temp(text, end, "!CR!")
+            elif mode == "curly" and colons > 0:
+                text = set_temp(text, end, "!CR!")
+            elif mode == "curly" and pipes > 0:
+                parts = []
+                for k in range(len(splits)):
+                    if k == 0:
+                        parts.append(text[start+1:splits[k][0]])
+                    else:
+                        parts.append(text[splits[k-1][0]+1:splits[k][0]])
+                parts.append(text[splits[-1][0]+1:end])
+                for k in range(len(parts)):
+                    if re.match(r"'\d+$", parts[k]) is not None:
+                        index = int(parts[k][1:]) - 1
+                        if index < 0 or index >= len(parts) or index == k:
+                            raise ValueError(f"Invalid square bracket pointer {parts[k]} at {text[start:end+1]}")
+                        parts[k] = parts[index]
+                
+                part = rand.choice(parts)
+                text = text[:start] + part + text[end+1:]
+                
+            else:
+                raise ValueError("Unexpected bracket evaluation")
+            
+            i = start - 1
+            start = -1
+            end = -1
+            splits = []
+            mode = ""
+            pipes = 0
+            colons = 0
+    
+    if (depth != 0):
+        raise ValueError("Invalid syntax: mismatched brackets")
+    
+    text = replace_temps(text, "!CR!", "}")
+    return text
+
+def set_temp(text: str, end: int, value: str):
+    return text[:end] + value + text[end+1:]
+def replace_temps(text: str, temp: str, value: str):
+    return text.replace(temp, value)

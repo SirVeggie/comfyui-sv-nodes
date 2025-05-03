@@ -480,6 +480,7 @@ class PromptProcessingVars:
             },
             "optional": {
                 "variables": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"forceInput": True}),
             }
         }
     
@@ -489,15 +490,18 @@ class PromptProcessingVars:
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Processing"
     
-    def run(self, prompt, variables=""):
+    def run(self, prompt, variables="", seed=1):
         prompt = remove_comments(prompt)
         parts = re.split(r"[\n\r]+[\s]*-+[\s]*[\n\r]+", prompt, 1)
         full_positive = parts[0]
         variables += "\npositive=" + clean_prompt(separate_lora(full_positive)[0])
         
-        expanded = process_vars(prompt, variables)
+        if len(parts) <= 1:
+            return (process_vars(parts[0], variables, seed))
+        parts[0] = process_vars(parts[0], variables, seed)
+        parts[1] = process_vars(parts[1], variables, seed)
         
-        return (expanded,)
+        return (f"{parts[0]}\n---\n{parts[1]}",)
 
 NODE_CLASS_MAPPINGS["SV-PromptProcessingVars"] = PromptProcessingVars
 NODE_DISPLAY_NAME_MAPPINGS["SV-PromptProcessingVars"] = "Variable Processing"
