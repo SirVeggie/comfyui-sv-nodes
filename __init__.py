@@ -3,7 +3,7 @@ import time
 import copy
 import comfy.samplers
 import folder_paths
-from .logic import calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, needs_seed, process, process_advanced, process_simple, process_control, process_vars, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
+from .logic import calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, needs_seed, process, process_advanced, process_simple, process_control, process_vars, process_wildcards, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
 import node_helpers
 import hashlib
 import math
@@ -109,6 +109,121 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-SimpleText"] = "Simple Text"
 
 #-------------------------------------------------------------------------------#
 
+class WildcardProcessing:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"forceInput": True}),
+                "wildcards": ("wildcards",),
+                "seed": ("INT", {"forceInput": True}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("output",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Processing"
+    
+    def check_lazy_status(self, text, **kwargs):
+        return ["wildcards"] if "__" in text else []
+    def run(self, text, wildcards, seed):
+        return process_wildcards(text, wildcards, seed, 5)
+    
+    @classmethod
+    def IS_CACHED(s, text, wildcards, seed):
+        return f"{text} {seed}"
+    
+NODE_CLASS_MAPPINGS["SV-WildcardProcessing"] = WildcardProcessing
+NODE_DISPLAY_NAME_MAPPINGS["SV-WildcardProcessing"] = "Wildcard Processing"
+
+#-------------------------------------------------------------------------------#
+
+class WildcardLoader:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "dir_path": ("STRING",)
+            }
+        }
+    
+    RETURN_TYPES = ("wildcards",)
+    RETURN_NAMES = ("wildcards",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/IO"
+    
+    def run(self, dir_path):
+        wildcards = {}
+        if not os.path.isdir(dir_path):
+            return (wildcards,)
+        
+        for filename in os.listdir(dir_path):
+            filepath = os.path.join(dir_path, filename)
+            if not os.path.isfile(filepath):
+                continue
+            key = os.path.splitext(filename)[0]
+            with open(filepath, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+                wildcards[key] = lines
+        return (wildcards,)
+    
+    @classmethod
+    def IS_CACHED(s, dir_path):
+        return os.path.getmtime(dir_path)
+    
+NODE_CLASS_MAPPINGS["SV-WildcardLoader"] = WildcardLoader
+NODE_DISPLAY_NAME_MAPPINGS["SV-WildcardLoader"] = "Load Wildcards"
+
+#-------------------------------------------------------------------------------#
+
+class WildcardTemp:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "input": ("STRING", {"multiline": True}),
+            },
+            "optional": {
+                "wildcards": ("wildcards",),
+            }
+        }
+    
+    RETURN_TYPES = ("wildcards",)
+    RETURN_NAMES = ("wildcards",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Input"
+    
+    key_regex = re.compile(r"^\[[\w -]+\]$")
+    def run(self, input: str, wildcards: dict[str: list[str]] = None):
+        result = copy.deepcopy(wildcards) if wildcards is not None else {}
+        lines = [line.strip() for line in input.splitlines() if line.strip()]
+        current_key = None
+        for line in lines:
+            if line.startswith("#") or line.startswith("//"):
+                continue
+            elif WildcardTemp.key_regex.match(line):
+                current_key = line[1:-1].strip()
+                if current_key not in result:
+                    result[current_key] = []
+            elif current_key is not None:
+                result[current_key].append(line)
+        return (result,)
+
+#-------------------------------------------------------------------------------#
+
 class PromptProcessing:
     def __init__(self):
         pass
@@ -121,7 +236,7 @@ class PromptProcessing:
             },
             "optional": {
                 "variables": ("STRING", {"forceInput": True}),
-                "seed": ("INT", {"forceInput": True, "lazy": True})
+                "seed": ("INT", {"forceInput": True})
             }
         }
     
@@ -130,11 +245,6 @@ class PromptProcessing:
     
     FUNCTION = "run"
     CATEGORY = "SV Nodes/Processing"
-    
-    def check_lazy_status(self, text, **kwargs):
-        if needs_seed(text):
-            return ["seed"]
-        return []
     
     def run(self, text, variables="", seed=1):
         text = remove_comments(text)

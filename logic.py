@@ -80,6 +80,36 @@ def needs_seed(prompt: str):
     return False
 
 #-------------------------------------------------------------------------------#
+# Wildcards
+
+wildRegex = re.compile(r"\b__(?:(\d+):)?([^\W_]+(?:[- _][^\W_]+)*)__\b")
+
+def process_wildcards(text: str, wildcards: dict[str, list[str]], seed: int, max_recursion: int, loop: int = 0):
+    rand = _random.Random(seed)
+    matches = list(wildRegex.finditer(text))
+    
+    i = 0;
+    for m in matches:
+        seed_part = m.group(1)
+        key = m.group(2)
+        rand2 = rand if seed_part is None else _random.Random(int(seed_part) + seed)
+        
+        if key in wildcards and wildcards[key]:
+            replacement = rand2.choice(wildcards[key])
+            
+            if "__" in replacement and loop < max_recursion:
+                next_seed = seed + i * 100000 + loop * 10000000
+                replacement = process_wildcards(replacement, wildcards, next_seed, max_recursion, loop + 1)
+            
+            text = text.replace(m.group(0), replacement, 1 if seed_part is None else -1)
+        else:
+            raise ValueError(f"Invalid wildcard key '{key}'")
+        i += 1
+    
+    return text
+
+#-------------------------------------------------------------------------------#
+# Prompt Processing
 
 def separate_lora(text: str):
     prompt = re.sub(r"<l\w+:[^>]+>", "", text, 0, re.IGNORECASE)
