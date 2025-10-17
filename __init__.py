@@ -170,7 +170,7 @@ class WildcardLoader:
             filepath = os.path.join(dir_path, filename)
             if not os.path.isfile(filepath):
                 continue
-            key = os.path.splitext(filename)[0]
+            key = os.path.splitext(filename)[0].lower()
             with open(filepath, "r", encoding="utf-8") as f:
                 lines = [line.strip() for line in f.readlines() if line.strip()]
                 wildcards[key] = lines
@@ -215,7 +215,7 @@ class WildcardTemp:
             if line.startswith("#") or line.startswith("//"):
                 continue
             elif WildcardTemp.key_regex.match(line):
-                current_key = line[1:-1].strip()
+                current_key = line[1:-1].strip().lower()
                 if current_key not in result:
                     result[current_key] = []
             elif current_key is not None:

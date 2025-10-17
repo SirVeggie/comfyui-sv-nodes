@@ -91,7 +91,7 @@ def process_wildcards(text: str, wildcards: dict[str, list[str]], seed: int, max
     i = 0;
     for m in matches:
         seed_part = m.group(1)
-        key = m.group(2)
+        key = m.group(2).lower()
         rand2 = rand if seed_part is None else _random.Random(int(seed_part) + seed)
         
         if key in wildcards and wildcards[key]:
