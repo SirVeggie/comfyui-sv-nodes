@@ -927,7 +927,7 @@ class BasicParamsOutput:
         sampler2 = comfy.samplers.sampler_object(sampler)
         scheduler = comfy.samplers.SCHEDULER_NAMES[0] if packet[4] in [None, "ays"] else packet[4]
         ays = packet[5] or False
-        start = packet[6] or 0.0
+        start = packet[6] or (1.0 - denoise)
         end = packet[7] or 1.0
         return cfg, steps, denoise, sampler, scheduler, ays, sampler2, start, end
 
