@@ -82,7 +82,7 @@ def needs_seed(prompt: str):
 #-------------------------------------------------------------------------------#
 # Wildcards
 
-wildRegex = re.compile(r"\b__(?:(\d+):)?([^\W_]+(?:[- _][^\W_]+)*)__\b")
+wildRegex = re.compile(r"\b__(?:(\d+):)?([^\W_]+(?:[- |_][^\W_]+)*)(?::(\d+))?__\b")
 
 def process_wildcards(text: str, wildcards: dict[str, list[str]], seed: int, max_recursion: int, loop: int = 0):
     rand = _random.Random(seed)
@@ -92,18 +92,35 @@ def process_wildcards(text: str, wildcards: dict[str, list[str]], seed: int, max
     for m in matches:
         seed_part = m.group(1)
         key = m.group(2).lower()
+        amount_part = int(m.group(3) or 1)
         rand2 = rand if seed_part is None else _random.Random(int(seed_part) + seed)
+        options = None
         
-        if key in wildcards and wildcards[key]:
-            replacement = rand2.choice(wildcards[key])
-            
-            if "__" in replacement and loop < max_recursion:
-                next_seed = seed + i * 100000 + loop * 10000000
-                replacement = process_wildcards(replacement, wildcards, next_seed, max_recursion, loop + 1)
-            
-            text = text.replace(m.group(0), replacement, 1 if seed_part is None else -1)
+        if "|" in key:
+            keys = key.split("|")
+            options = []
+            for k in keys:
+                k = k.strip()
+                if k in wildcards and wildcards[k]:
+                    options.extend(wildcards[k])
+                else:
+                    raise ValueError(f"Invalid wildcard '{k}' in multi-set '{key}'")
+            options = list(set(options))
+        elif key in wildcards and wildcards[key]:
+            options = wildcards[key]
         else:
-            raise ValueError(f"Invalid wildcard key '{key}'")
+            raise ValueError(f"Invalid wildcard '{key}'")
+        
+        if not options:
+            raise ValueError(f"No options available for wildcard '{key}'")
+        choices = rand2.sample(options, min(amount_part, len(options)))
+        replacement = ", ".join(choices)
+        
+        if "__" in replacement and loop < max_recursion:
+            next_seed = seed + i * 100000 + loop * 10000000
+            replacement = process_wildcards(replacement, wildcards, next_seed, max_recursion, loop + 1)
+        
+        text = text.replace(m.group(0), replacement, 1 if seed_part is None else -1)
         i += 1
     
     return text

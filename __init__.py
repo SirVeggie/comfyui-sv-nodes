@@ -132,7 +132,7 @@ class WildcardProcessing:
     def check_lazy_status(self, text, **kwargs):
         return ["wildcards"] if "__" in text else []
     def run(self, text, wildcards, seed):
-        return process_wildcards(text, wildcards, seed, 5)
+        return (process_wildcards(text, wildcards, seed, 5),)
     
     @classmethod
     def IS_CACHED(s, text, wildcards, seed):
@@ -166,14 +166,22 @@ class WildcardLoader:
         if not os.path.isdir(dir_path):
             return (wildcards,)
         
-        for filename in os.listdir(dir_path):
-            filepath = os.path.join(dir_path, filename)
-            if not os.path.isfile(filepath):
-                continue
-            key = os.path.splitext(filename)[0].lower()
-            with open(filepath, "r", encoding="utf-8") as f:
-                lines = [line.strip() for line in f.readlines() if line.strip()]
-                wildcards[key] = lines
+        dirs = [dir_path]
+        while dirs:
+            dir_path = dirs.pop()
+            for filename in os.listdir(dir_path):
+                filepath = os.path.join(dir_path, filename)
+                if os.path.isdir(filepath):
+                    dirs.append(filepath)
+                    continue
+                if not os.path.isfile(filepath):
+                    continue
+                key = os.path.splitext(filename)[0].lower()
+                if key in wildcards:
+                    raise ValueError(f"Duplicate wildcard '{key}' found in '{filepath}'")
+                with open(filepath, "r", encoding="utf-8") as f:
+                    lines = [line.strip() for line in f.readlines() if line.strip()]
+                    wildcards[key] = lines
         return (wildcards,)
     
     @classmethod
@@ -185,7 +193,7 @@ NODE_DISPLAY_NAME_MAPPINGS["SV-WildcardLoader"] = "Load Wildcards"
 
 #-------------------------------------------------------------------------------#
 
-class WildcardTemp:
+class WildcardString:
     def __init__(self):
         pass
     
@@ -214,13 +222,16 @@ class WildcardTemp:
         for line in lines:
             if line.startswith("#") or line.startswith("//"):
                 continue
-            elif WildcardTemp.key_regex.match(line):
+            elif WildcardString.key_regex.match(line):
                 current_key = line[1:-1].strip().lower()
                 if current_key not in result:
                     result[current_key] = []
             elif current_key is not None:
                 result[current_key].append(line)
         return (result,)
+
+NODE_CLASS_MAPPINGS["SV-WildcardString"] = WildcardString
+NODE_DISPLAY_NAME_MAPPINGS["SV-WildcardString"] = "String Wildcards"
 
 #-------------------------------------------------------------------------------#
 
