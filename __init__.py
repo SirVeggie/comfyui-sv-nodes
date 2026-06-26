@@ -4,6 +4,7 @@ import copy
 import comfy.samplers
 import folder_paths
 from .logic import approx_index, calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, find_percent, get_sigmas, get_skimming_mask, interpolated_scales, needs_seed, normalize_adjust, process, process_advanced, process_simple, process_control, process_vars, process_wildcards, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
+from .llm import LLMArgs, LLMRequest
 from .sv_types import (
     Wildcards, SvPrompt, CondList, RsOutput, PpmOutput, BpOutput, Sigmas, SvSampler,
     FlowControl, SvPipe, Accumulation, Signal, Timer, Curve,
@@ -14,6 +15,10 @@ import math
 import random as _random
 import json
 import re
+import urllib.request
+from io import BytesIO
+import numpy as np
+from PIL import Image
 import torch
 import sys
 import time
@@ -26,6 +31,24 @@ from comfy_api.latest import ComfyExtension, io, ui
 # Constants
 
 NUM_FLOW_SOCKETS = 4
+
+IMAGE_EXTENSIONS = frozenset({
+    ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif",
+})
+
+
+def _list_images_recursive(folder: str) -> list[str]:
+    images: list[str] = []
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            if os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS:
+                images.append(os.path.join(root, name))
+    return sorted(images)
+
+
+def _load_image_tensor(path: str) -> torch.Tensor:
+    img = node_helpers.pillow(Image.open, path).convert("RGB")
+    return torch.from_numpy(np.array(img, dtype=np.float32) / 255.0)[None,]
 
 
 #-------------------------------------------------------------------------------#
@@ -4265,6 +4288,28 @@ class PrimitiveFloat(io.ComfyNode):
 
 #-------------------------------------------------------------------------------#
 
+class PrecisionFloat(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-PrecisionFloat',
+            display_name='Precision Float',
+            category='SV Nodes/Input',
+            inputs=[
+            io.Float.Input('float', min=-sys.float_info.max, max=sys.float_info.max, step=0.05, default=0.0),
+            ],
+            outputs=[
+            io.Float.Output(display_name='float'),
+            ]
+        )
+
+    
+    @classmethod
+    def execute(cls, float) -> io.NodeOutput:
+        return io.NodeOutput(float,)
+
+#-------------------------------------------------------------------------------#
+
 class UnitFloat(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -4341,6 +4386,73 @@ class PadImage(io.ComfyNode):
         new_image[:, padding:padding + d2, padding:padding + d3, :] = image
 
         return io.NodeOutput(new_image,)
+
+#-------------------------------------------------------------------------------#
+
+class PicsumRandomImage(io.ComfyNode):
+    _match_template = io.MatchType.Template('PicsumRandomImage')
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-PicsumRandomImage',
+            display_name='Picsum Random Image',
+            category='SV Nodes/Input',
+            inputs=[
+            io.MatchType.Input('trigger', template=cls._match_template),
+            ],
+            outputs=[
+            io.Image.Output(display_name='image'),
+            ]
+        )
+
+    @classmethod
+    def fingerprint_inputs(cls, trigger) -> str:
+        return repr(trigger)
+
+    @classmethod
+    def execute(cls, trigger) -> io.NodeOutput:
+        url = "https://picsum.photos/512/512"
+        req = urllib.request.Request(url, headers={"User-Agent": "ComfyUI-SV-Nodes"})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = response.read()
+        img = Image.open(BytesIO(data)).convert("RGB")
+        tensor = torch.from_numpy(np.array(img, dtype=np.float32) / 255.0)[None,]
+        return io.NodeOutput(tensor,)
+
+#-------------------------------------------------------------------------------#
+
+class RandomImage(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-RandomImage',
+            display_name='Random Image',
+            category='SV Nodes/Input',
+            inputs=[
+            io.Int.Input('seed', default=0, min=0, max=sys.maxsize, step=1, force_input=True),
+            io.String.Input('folder', default='', multiline=False),
+            ],
+            outputs=[
+            io.Image.Output(display_name='image'),
+            ]
+        )
+
+    @classmethod
+    def fingerprint_inputs(cls, seed, folder) -> str:
+        return f"{seed}:{folder}"
+
+    @classmethod
+    def execute(cls, seed, folder) -> io.NodeOutput:
+        if not isinstance(folder, str):
+            raise TypeError("Invalid folder path input type")
+        if not folder or not os.path.isdir(folder):
+            raise FileNotFoundError(f"Folder not found: {folder!r}")
+        images = _list_images_recursive(folder)
+        if not images:
+            raise FileNotFoundError(f"No images found in {folder!r}")
+        path = _random.Random(seed).choice(images)
+        return io.NodeOutput(_load_image_tensor(path),)
 
 #-------------------------------------------------------------------------------#
 
@@ -4728,9 +4840,14 @@ NODE_LIST = [
     ValueRepeater,
     ValueGate,
     PrimitiveFloat,
+    PrecisionFloat,
     UnitFloat,
     MetadataJson,
     PadImage,
+    PicsumRandomImage,
+    RandomImage,
+    LLMArgs,
+    LLMRequest,
     SV_SkimmedCFGDifference,
     SV_SkimmedCFGDual,
     SV_CondDiffSharpening,
