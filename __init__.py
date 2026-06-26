@@ -1,9 +1,10 @@
 import os
 import time
 import copy
+from .borrowed import BORROWED_CLASS_MAPPINGS, BORROWED_DISPLAY_NAME_MAPPINGS
 import comfy.samplers
 import folder_paths
-from .logic import calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, needs_seed, process, process_advanced, process_simple, process_control, process_vars, process_wildcards, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
+from .logic import approx_index, calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, find_percent, get_sigmas, get_skimming_mask, interpolated_scales, needs_seed, normalize_adjust, process, process_advanced, process_simple, process_control, process_vars, process_wildcards, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
 import node_helpers
 import hashlib
 import math
@@ -75,8 +76,8 @@ def VariantSupport():
 #-------------------------------------------------------------------------------#
 # Mappings
 
-NODE_CLASS_MAPPINGS = {}
-NODE_DISPLAY_NAME_MAPPINGS = {}
+NODE_CLASS_MAPPINGS = BORROWED_CLASS_MAPPINGS
+NODE_DISPLAY_NAME_MAPPINGS = BORROWED_DISPLAY_NAME_MAPPINGS
 
 #-------------------------------------------------------------------------------#
 # Classes
@@ -1535,6 +1536,33 @@ class SigmaRemap:
 
 NODE_CLASS_MAPPINGS["SV-SigmaRemap"] = SigmaRemap
 NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaRemap"] = "Sigma Remap"
+
+#-------------------------------------------------------------------------------#
+
+class SigmaRescale:
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "sigmas": ("SIGMAS",),
+                "scale": ("FLOAT", {"default": 2, "min": 0, "max": 10, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("SIGMAS",)
+    RETURN_NAMES = ("sigmas",)
+    
+    FUNCTION = "run"
+    CATEGORY = "SV Nodes/Sigmas"
+    
+    def run(self, sigmas, scale):
+        return (torch.FloatTensor([s * scale for s in sigmas.tolist()]).cpu(),)
+
+NODE_CLASS_MAPPINGS["SV-SigmaRescale"] = SigmaRescale
+NODE_DISPLAY_NAME_MAPPINGS["SV-SigmaRescale"] = "Sigma Rescale"
 
 #-------------------------------------------------------------------------------#
 
@@ -4118,7 +4146,7 @@ def parseCurve(curve):
         curve = collapseSigns(curve)
         while "(" in curve or ")" in curve:
             curve = re.sub(r"\w+\([^()]+\)", lambda x : str(parseCurveFunction(x.group(0), t)), curve)
-            curve = re.sub(r"\([^(,)]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
+            curve = re.sub(r"(?<!\w)\([^(,)]+\)", lambda x : str(parseCurve(x.group(0)[1:-1])(t)), curve)
             curve = collapseSigns(curve)
         parts = [x for x in filter(lambda x : len(x), re.split("(?<!\^)(?<!\*|/|%)(?=[-+])", curve))]
         if len(parts) == 0:
@@ -4699,6 +4727,232 @@ class PadImage:
 
 NODE_CLASS_MAPPINGS["SV-PadImage"] = PadImage
 NODE_DISPLAY_NAME_MAPPINGS["SV-PadImage"] = "Pad Image"
+
+#-------------------------------------------------------------------------------#
+
+# Modified from a node by Extraltodeus https://github.com/Extraltodeus/Skimmed_CFG
+class SV_SkimmedCFGDifference:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "reference_CFG": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 25, "step": 0.5}),
+                "method": (["linear_distance","squared_distance","root_distance","absolute_sum"],),
+                "start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "end_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "patch"
+
+    CATEGORY = "SV Nodes/Model Patching"
+
+    def patch(self, model, reference_CFG, method, start_at, end_at):
+        
+        @torch.no_grad()
+        def pre_cfg_patch(args):
+            conds_out = args["conds_out"]
+            cond_scale = args["cond_scale"]
+            x_orig = args['input']
+            sigma = args["sigma"][0]
+            
+            sigmas = get_sigmas(args)
+            start_at_sigma = find_percent(sigmas, start_at)
+            end_at_sigma = find_percent(sigmas, end_at)
+
+            if not torch.any(conds_out[1]) or sigma <= end_at_sigma or sigma > start_at_sigma:
+                return conds_out
+
+            if method == "absolute_sum":
+                ref_norm = (conds_out[0] * reference_CFG - conds_out[1] * (reference_CFG - 1)).norm(p=1)
+                cfg_norm = (conds_out[0] * cond_scale - conds_out[1] * (cond_scale - 1)).norm(p=1)
+                new_scale = cond_scale * ref_norm / cfg_norm
+                fallback_weight = (new_scale - 1) / (cond_scale - 1)
+                conds_out[1] = conds_out[0] * (1 - fallback_weight) + conds_out[1] * fallback_weight
+            elif method in ["linear_distance","squared_distance","root_distance"]:
+                conds_out[1] = interpolated_scales(x_orig,conds_out[0],conds_out[1],cond_scale,reference_CFG,method=="squared_distance",method=="root_distance")
+            return conds_out
+
+        m = model.clone()
+        m.set_model_sampler_pre_cfg_function(pre_cfg_patch)
+        return (m, )
+
+NODE_CLASS_MAPPINGS["SV-SkimmedCFGDifference"] = SV_SkimmedCFGDifference
+NODE_DISPLAY_NAME_MAPPINGS["SV-SkimmedCFGDifference"] = "Skimmed Diff CFG"
+
+#-------------------------------------------------------------------------------#
+
+# Modified from a node by Extraltodeus https://github.com/Extraltodeus/Skimmed_CFG
+class SV_SkimmedCFGDual:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "positive_cfg": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 25, "step": 0.5}),
+                "negative_cfg": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 25, "step": 0.5}),
+                "start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "end_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "patch"
+
+    CATEGORY = "SV Nodes/Model Patching"
+
+    def patch(self, model, positive_cfg, negative_cfg, start_at, end_at):
+
+        @torch.no_grad()
+        def pre_cfg_patch(args):
+            conds_out = args["conds_out"]
+            cond_scale = args["cond_scale"]
+            x_orig = args['input']
+            sigma = args["sigma"][0]
+            
+            sigmas = get_sigmas(args)
+            start_at_sigma = find_percent(sigmas, start_at)
+            end_at_sigma = find_percent(sigmas, end_at)
+
+            if not torch.any(conds_out[1]) or sigma <= end_at_sigma or sigma > start_at_sigma:
+                return conds_out
+
+            fallback_weight_positive = (positive_cfg - 1) / (cond_scale - 1)
+            fallback_weight_negative = (negative_cfg - 1) / (cond_scale - 1)
+
+            skim_mask = get_skimming_mask(x_orig, conds_out[1], conds_out[0], cond_scale)
+            conds_out[1][skim_mask] = conds_out[0][skim_mask] * (1 - fallback_weight_negative) + conds_out[1][skim_mask] * fallback_weight_negative
+
+            skim_mask = get_skimming_mask(x_orig, conds_out[0], conds_out[1], cond_scale)
+            conds_out[1][skim_mask] = conds_out[0][skim_mask] * (1 - fallback_weight_positive) + conds_out[1][skim_mask] * fallback_weight_positive
+
+            return conds_out
+
+        m = model.clone()
+        m.set_model_sampler_pre_cfg_function(pre_cfg_patch)
+        return (m, )
+
+NODE_CLASS_MAPPINGS["SV-SkimmedCFGDual"] = SV_SkimmedCFGDual
+NODE_DISPLAY_NAME_MAPPINGS["SV-SkimmedCFGDual"] = "Skimmed Dual CFG"
+
+#-------------------------------------------------------------------------------#
+
+# Modified from a node by Extraltodeus https://github.com/Extraltodeus/pre_cfg_comfy_nodes_for_ComfyUI
+class SV_CondDiffSharpening:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "do_on": (["both","cond","uncond"], {"default": "both"}),
+                "scale": ("FLOAT", {"default": 0.5, "min": -10.0, "max": 10.0, "step": 0.05}),
+                "start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "end_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            }
+        }
+    
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "patch"
+
+    CATEGORY = "SV Nodes/Model Patching"
+
+    def patch(self, model, do_on, scale, start_at, end_at):
+        prev_cond = None
+        prev_uncond = None
+
+        @torch.no_grad()
+        def sharpen_conds_pre_cfg(args):
+            nonlocal prev_cond, prev_uncond
+            conds_out = args["conds_out"]
+            uncond = torch.any(conds_out[1])
+            sigma = args["sigma"][0].item()
+            
+            sigmas = get_sigmas(args)
+            start_at_sigma = find_percent(sigmas, start_at)
+            end_at_sigma = find_percent(sigmas, end_at)
+            
+            first_step = sigmas[0] == sigma
+            # last_step = sigmas[-1] == sigma
+            if first_step:
+                prev_cond = None
+                prev_uncond = None
+
+            for b in range(len(conds_out[0])):
+                for c in range(len(conds_out[0][b])):
+                    if not first_step and sigma > end_at_sigma and sigma <= start_at_sigma:
+                        if prev_cond is not None and do_on in ['both','cond']:
+                            conds_out[0][b][c] = normalize_adjust(conds_out[0][b][c], prev_cond[b][c], scale)
+                        if prev_uncond is not None and uncond and do_on in ['both','uncond']:
+                            conds_out[1][b][c] = normalize_adjust(conds_out[1][b][c], prev_uncond[b][c], scale)
+
+            prev_cond = conds_out[0]
+            if uncond:
+                prev_uncond = conds_out[1]
+
+            return conds_out
+
+        m = model.clone()
+        m.set_model_sampler_pre_cfg_function(sharpen_conds_pre_cfg)
+        return (m, )
+
+NODE_CLASS_MAPPINGS["SV-CondDiffSharpening"] = SV_CondDiffSharpening
+NODE_DISPLAY_NAME_MAPPINGS["SV-CondDiffSharpening"] = "CFG Sharpening"
+
+#-------------------------------------------------------------------------------#
+
+# Modified from a node by Extraltodeus https://github.com/Extraltodeus/pre_cfg_comfy_nodes_for_ComfyUI
+class SV_CFGVariableScale:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "start_mult": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
+                "end_mult": ("FLOAT", {"default": 1.5, "min": 0.0, "max": 10.0, "step": 0.01}),
+                "mode": (["sigma","steps"],),
+            }
+        }
+    RETURN_TYPES = ("MODEL",)
+    FUNCTION = "patch"
+
+    CATEGORY = "model_patches/Pre CFG"
+
+    def patch(self, model, start_mult, end_mult, mode):
+
+        @torch.no_grad()
+        def variable_scale_pre_cfg_patch(args):
+            conds_out = args["conds_out"]
+            args['cond_scale'] = args['cond_scale'] * 2
+            uncond = torch.any(conds_out[1])
+
+            if not uncond:
+                return conds_out
+            
+            sigmas = get_sigmas(args)
+            sigma_max = sigmas[0]
+
+            sigma = args["sigma"][0].item()
+            if mode == "steps":
+                progression = approx_index(sigmas, sigma) / (len(sigmas) - 1)
+            else:
+                progression = 1 - sigma / sigma_max
+
+            progression = max(min(progression, 1), 0)
+            current_multiplier = start_mult * (1 - progression) + end_mult * progression
+
+            conds_out[0] = conds_out[0] * current_multiplier
+            conds_out[1] = conds_out[1] * current_multiplier
+
+            return conds_out
+
+        m = model.clone()
+        m.set_model_sampler_pre_cfg_function(variable_scale_pre_cfg_patch)
+        return (m, )
+
+NODE_CLASS_MAPPINGS["SV-CFGVariableScale"] = SV_CFGVariableScale
+NODE_DISPLAY_NAME_MAPPINGS["SV-CFGVariableScale"] = "CFG Variable Scale"
 
 #-------------------------------------------------------------------------------#
 # Experiments
