@@ -161,9 +161,9 @@ def _merge_request_body(
         "messages": messages,
         "stream": False,
     }
+    body.update(parse_llm_args(llm_args))
     if seed is not None:
         body["seed"] = int(seed)
-    body.update(parse_llm_args(llm_args))
     body["stream"] = False
     body.pop("stream_options", None)
     return body
@@ -197,10 +197,16 @@ def _estimate_tokens(content: str, prompt: str, prompt_tokens: int, completion_t
     return prompt_tokens, completion_tokens
 
 
+def _display_model_name(model: str) -> str:
+    if not model:
+        return model
+    return Path(model.replace("\\", "/")).name
+
+
 def _format_stats(model: str, duration: float, prompt_tokens: int, completion_tokens: int) -> str:
     speed = completion_tokens / duration if duration > 0 else 0.0
     return (
-        f"model: {model}\n"
+        f"model: {_display_model_name(model)}\n"
         f"duration: {duration:.2f}s\n"
         f"prompt tokens: {prompt_tokens}\n"
         f"completion tokens: {completion_tokens}\n"
@@ -329,7 +335,17 @@ class LLMRequest(io.ComfyNode):
         )
 
     @classmethod
-    def fingerprint_inputs(cls, provider, model, prompt, system_instruction=None, image_1=None, image_2=None, seed=None, llm_args=None) -> str:
+    def fingerprint_inputs(
+        cls,
+        system_instruction=None,
+        provider=None,
+        model="",
+        prompt="",
+        image_1=None,
+        image_2=None,
+        seed=None,
+        llm_args=None,
+    ) -> str:
         return json.dumps({
             "provider": provider,
             "model": model,
@@ -344,10 +360,10 @@ class LLMRequest(io.ComfyNode):
     @classmethod
     def execute(
         cls,
-        provider,
-        model,
-        prompt,
         system_instruction=None,
+        provider=None,
+        model="",
+        prompt="",
         image_1=None,
         image_2=None,
         seed=None,
@@ -371,4 +387,5 @@ class LLMRequest(io.ComfyNode):
             system_instruction,
         )
         stats = _format_stats(model_used, duration, prompt_tokens, completion_tokens)
+        stats += f"\nrequest seed: {body.get('seed', '(none)')}"
         return io.NodeOutput(result, stats)

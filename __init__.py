@@ -2,8 +2,21 @@ import os
 import time
 import copy
 import comfy.samplers
+import comfy.utils
 import folder_paths
 from .logic import approx_index, calculate_sigma_range, calculate_sigma_range_percent, clean_prompt, default, find_percent, get_sigmas, get_skimming_mask, interpolated_scales, needs_seed, normalize_adjust, process, process_advanced, process_simple, process_control, process_vars, process_wildcards, remove_comments, separate_lora, separate_lora_advanced, unescape_prompt
+from .danbooru import DanbooruRandomImage, DanbooruSearchImage
+from .krea import (
+    ConditioningNoiseNudge,
+    ConditioningScaleJitter,
+    ConditioningTokenDropoutNudge,
+    Krea2LocalStyleReferenceOld,
+    Krea2Reference,
+    Krea2ReferenceAdvanced,
+    Krea2ReferencePlus,
+    Krea2ResizeImage,
+    ScaleConditioning,
+)
 from .llm import LLMArgs, LLMRequest
 from .sv_types import (
     Wildcards, SvPrompt, CondList, RsOutput, PpmOutput, BpOutput, Sigmas, SvSampler,
@@ -557,8 +570,6 @@ class PromptProcessingVars(io.ComfyNode):
 #-------------------------------------------------------------------------------#
 
 class ResolutionSelector(io.ComfyNode):
-    _match_template = io.MatchType.Template('ResolutionSelector')
-
     @classmethod
     def define_schema(cls) -> io.Schema:
         return io.Schema(
@@ -569,8 +580,8 @@ class ResolutionSelector(io.ComfyNode):
             io.Int.Input('base', default=768, min=64, max=4096, step=64),
             io.Combo.Input('ratio', options=['1:1', '5:4', '4:3', '3:2', '16:9', '21:9']),
             io.Boolean.Input('orientation', default=False, label_on='portrait', label_off='landscape'),
-            io.MatchType.Input('seed', template=cls._match_template, optional=True),
-            io.MatchType.Input('random', template=cls._match_template, optional=True),
+            io.Int.Input('seed', default=-1, optional=True),
+            io.String.Input('random', default='', optional=True),
             ],
             outputs=[
             io.Int.Output(display_name='width'),
@@ -611,8 +622,6 @@ class ResolutionSelector(io.ComfyNode):
 #-------------------------------------------------------------------------------#
 
 class ResolutionSelector2(io.ComfyNode):
-    _match_template = io.MatchType.Template('ResolutionSelector2')
-
     @classmethod
     def define_schema(cls) -> io.Schema:
         return io.Schema(
@@ -625,8 +634,8 @@ class ResolutionSelector2(io.ComfyNode):
             io.Boolean.Input('orientation', default=False, label_on='portrait', label_off='landscape'),
             io.Float.Input('hires', min=1, max=4, step=0.1, default=1.5),
             io.Int.Input('batch', min=1, max=32, step=1, default=1),
-            io.MatchType.Input('seed', template=cls._match_template, optional=True),
-            io.MatchType.Input('random', template=cls._match_template, optional=True),
+            io.Int.Input('seed', default=-1, optional=True),
+            io.String.Input('random', default='', optional=True),
             ],
             outputs=[
             RsOutput.Output(display_name='packet'),
@@ -4266,6 +4275,28 @@ class ValueGate(io.ComfyNode):
 
 #-------------------------------------------------------------------------------#
 
+class PrimitiveNone(io.ComfyNode):
+    _match_template = io.MatchType.Template('PrimitiveNone')
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-PrimitiveNone',
+            display_name='Primitive None',
+            category='SV Nodes/Input',
+            inputs=[],
+            outputs=[
+            io.MatchType.Output(template=cls._match_template, display_name='none'),
+            ]
+        )
+
+    
+    @classmethod
+    def execute(cls) -> io.NodeOutput:
+        return io.NodeOutput(None,)
+
+#-------------------------------------------------------------------------------#
+
 class PrimitiveFloat(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -4353,6 +4384,69 @@ class MetadataJson(io.ComfyNode):
         return io.NodeOutput(json.dumps({"extra": {
             "prompt": prompt,
         }}),)
+
+#-------------------------------------------------------------------------------#
+
+class ResizeImage(io.ComfyNode):
+    ASPECT_RATIOS = (
+        "preserve",
+        "1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9",
+    )
+    MULTIPLES = ("4", "8", "16", "32", "64", "128")
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-ResizeImage',
+            display_name='Resize Image',
+            category='SV Nodes/image',
+            inputs=[
+            io.Image.Input('image', optional=True),
+            io.Combo.Input('aspect_ratio', options=list(cls.ASPECT_RATIOS), default='preserve'),
+            io.Float.Input('megapixels', default=1.0, min=0.0, max=4.0, step=0.1),
+            io.Combo.Input('multiple', options=list(cls.MULTIPLES), default='8'),
+            ],
+            outputs=[
+            io.Image.Output(display_name='image'),
+            ]
+        )
+
+    @staticmethod
+    def _compute_dimensions(src_width, src_height, aspect_ratio, megapixels, multiple):
+        if aspect_ratio == "preserve":
+            aspect = src_width / src_height
+        else:
+            parts = aspect_ratio.split(":")
+            aspect = float(parts[0]) / float(parts[1])
+
+        if megapixels > 0:
+            target_pixels = megapixels * 1_000_000
+        else:
+            target_pixels = src_width * src_height
+
+        new_width = math.sqrt(target_pixels * aspect)
+        new_height = math.sqrt(target_pixels / aspect)
+        new_width = max(multiple, math.floor(new_width / multiple) * multiple)
+        new_height = max(multiple, math.floor(new_height / multiple) * multiple)
+        return int(new_width), int(new_height)
+
+    @classmethod
+    def execute(cls, aspect_ratio, megapixels, multiple, image=None) -> io.NodeOutput:
+        if image is None:
+            return io.NodeOutput(None,)
+
+        multiple = int(multiple)
+        _batch, height, width, _channels = image.shape
+        new_width, new_height = cls._compute_dimensions(
+            width, height, aspect_ratio, megapixels, multiple,
+        )
+
+        if new_width == width and new_height == height:
+            return io.NodeOutput(image,)
+
+        samples = image[:, :, :, :3].movedim(-1, 1)
+        resized = comfy.utils.common_upscale(samples, new_width, new_height, "area", "disabled")
+        return io.NodeOutput(resized.movedim(1, -1),)
 
 #-------------------------------------------------------------------------------#
 
@@ -4839,13 +4933,26 @@ NODE_LIST = [
     VariableClear,
     ValueRepeater,
     ValueGate,
+    PrimitiveNone,
     PrimitiveFloat,
     PrecisionFloat,
     UnitFloat,
     MetadataJson,
     PadImage,
+    ResizeImage,
     PicsumRandomImage,
     RandomImage,
+    DanbooruRandomImage,
+    DanbooruSearchImage,
+    Krea2LocalStyleReferenceOld,
+    Krea2Reference,
+    Krea2ReferenceAdvanced,
+    Krea2ReferencePlus,
+    Krea2ResizeImage,
+    ScaleConditioning,
+    ConditioningNoiseNudge,
+    ConditioningTokenDropoutNudge,
+    ConditioningScaleJitter,
     LLMArgs,
     LLMRequest,
     SV_SkimmedCFGDifference,
