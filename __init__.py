@@ -3427,8 +3427,8 @@ class DefaultInt(io.ComfyNode):
             display_name='Default Int',
             category='SV Nodes/Logic',
             inputs=[
-            io.MatchType.Input('any', template=cls._match_template),
-            io.Int.Input('default', min=-sys.maxsize, max=sys.maxsize, step=1, default=0, lazy=True),
+            io.MatchType.Input('any', template=cls._match_template, optional=True),
+            io.Int.Input('default', min=-sys.maxsize, max=sys.maxsize, step=1, default=0, lazy=True, optional=True),
             ],
             outputs=[
             io.Int.Output(display_name='int'),
@@ -3443,7 +3443,7 @@ class DefaultInt(io.ComfyNode):
         return []
     
     @classmethod
-    def execute(cls, any, default) -> io.NodeOutput:
+    def execute(cls, any=None, default=0) -> io.NodeOutput:
         if any is None or not isinstance(any, int):
             return io.NodeOutput(default,)
         return io.NodeOutput(any,)
@@ -3460,8 +3460,8 @@ class DefaultFloat(io.ComfyNode):
             display_name='Default Float',
             category='SV Nodes/Logic',
             inputs=[
-            io.MatchType.Input('any', template=cls._match_template),
-            io.Float.Input('default', min=-sys.float_info.max, max=sys.float_info.max, step=0.01, default=0.0, lazy=True),
+            io.MatchType.Input('any', template=cls._match_template, optional=True),
+            io.Float.Input('default', min=-sys.float_info.max, max=sys.float_info.max, step=0.01, default=0.0, lazy=True, optional=True),
             ],
             outputs=[
             io.Float.Output(display_name='float'),
@@ -3476,7 +3476,7 @@ class DefaultFloat(io.ComfyNode):
         return []
     
     @classmethod
-    def execute(cls, any, default) -> io.NodeOutput:
+    def execute(cls, any=None, default=0.0) -> io.NodeOutput:
         if any is None or not isinstance(any, float):
             return io.NodeOutput(default,)
         return io.NodeOutput(any,)
@@ -3493,8 +3493,8 @@ class DefaultString(io.ComfyNode):
             display_name='Default String',
             category='SV Nodes/Logic',
             inputs=[
-            io.MatchType.Input('any', template=cls._match_template),
-            io.String.Input('default', multiline=False, default='', lazy=True),
+            io.MatchType.Input('any', template=cls._match_template, optional=True),
+            io.String.Input('default', multiline=False, default='', lazy=True, optional=True),
             ],
             outputs=[
             io.String.Output(display_name='string'),
@@ -3509,7 +3509,7 @@ class DefaultString(io.ComfyNode):
         return []
     
     @classmethod
-    def execute(cls, any, default) -> io.NodeOutput:
+    def execute(cls, any=None, default='') -> io.NodeOutput:
         if any is None or not isinstance(any, str):
             return io.NodeOutput(default,)
         return io.NodeOutput(any,)
@@ -3526,8 +3526,8 @@ class DefaultBoolean(io.ComfyNode):
             display_name='Default Boolean',
             category='SV Nodes/Logic',
             inputs=[
-            io.MatchType.Input('any', template=cls._match_template),
-            io.Boolean.Input('default', default=False, lazy=True),
+            io.MatchType.Input('any', template=cls._match_template, optional=True),
+            io.Boolean.Input('default', default=False, lazy=True, optional=True),
             ],
             outputs=[
             io.Boolean.Output(display_name='bool'),
@@ -3542,7 +3542,7 @@ class DefaultBoolean(io.ComfyNode):
         return []
     
     @classmethod
-    def execute(cls, any, default) -> io.NodeOutput:
+    def execute(cls, any=None, default=False) -> io.NodeOutput:
         if any is None or not isinstance(any, bool):
             return io.NodeOutput(default,)
         return io.NodeOutput(any,)
@@ -3559,8 +3559,8 @@ class DefaultValue(io.ComfyNode):
             display_name='Default Value',
             category='SV Nodes/Logic',
             inputs=[
-            io.MatchType.Input('any', template=cls._match_template),
-            io.MatchType.Input('default', template=cls._match_template, lazy=True),
+            io.MatchType.Input('any', template=cls._match_template, optional=True),
+            io.MatchType.Input('default', template=cls._match_template, lazy=True, optional=True),
             ],
             outputs=[
             io.MatchType.Output(template=cls._match_template, display_name='value'),
@@ -3575,7 +3575,7 @@ class DefaultValue(io.ComfyNode):
         return []
     
     @classmethod
-    def execute(cls, any, default) -> io.NodeOutput:
+    def execute(cls, any=None, default=None) -> io.NodeOutput:
         if any is None:
             return io.NodeOutput(default,)
         return io.NodeOutput(any,)
@@ -4086,6 +4086,54 @@ class ImageReroute(io.ComfyNode):
     @classmethod
     def execute(cls, image) -> io.NodeOutput:
         return io.NodeOutput(image,)
+
+#-------------------------------------------------------------------------------#
+
+class GenericReroute(io.ComfyNode):
+    _match_template = io.MatchType.Template('GenericReroute')
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-GenericReroute',
+            display_name='Generic Reroute',
+            category='SV Nodes/Flow',
+            inputs=[
+            io.MatchType.Input('value', template=cls._match_template),
+            ],
+            outputs=[
+            io.MatchType.Output(template=cls._match_template, display_name='value'),
+            ]
+        )
+
+    
+    @classmethod
+    def execute(cls, value) -> io.NodeOutput:
+        return io.NodeOutput(value,)
+
+#-------------------------------------------------------------------------------#
+
+class OptionalReroute(io.ComfyNode):
+    _match_template = io.MatchType.Template('OptionalReroute')
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id='SV-OptionalReroute',
+            display_name='Optional Reroute',
+            category='SV Nodes/Flow',
+            inputs=[
+            io.MatchType.Input('value', template=cls._match_template, optional=True),
+            ],
+            outputs=[
+            io.MatchType.Output(template=cls._match_template, display_name='value'),
+            ]
+        )
+
+    
+    @classmethod
+    def execute(cls, value=None) -> io.NodeOutput:
+        return io.NodeOutput(value,)
 
 #-------------------------------------------------------------------------------#
 
@@ -4927,6 +4975,8 @@ NODE_LIST = [
     SigmaReroute,
     ConditioningReroute,
     ImageReroute,
+    GenericReroute,
+    OptionalReroute,
     SwapValues,
     VariableSet,
     VariableGet,
