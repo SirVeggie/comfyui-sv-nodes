@@ -1,5 +1,7 @@
 ## Custom nodes for ComfyUI
 
+Custom nodes for ComfyUI using the **V3 node schema** (`comfy_api.latest`). Requires a recent ComfyUI build that supports `comfy_entrypoint()` registration.
+
 Currently includes simple nodes that I wanted for easier and more compact workflow creation, and flow control nodes.
 
 ### Documentation

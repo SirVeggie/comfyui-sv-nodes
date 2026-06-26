@@ -1,6 +1,7 @@
 import math
 import re
 import random as _random
+import torch
 
 #-------------------------------------------------------------------------------#
 # Helper functions
@@ -13,6 +14,56 @@ def default(value, *args):
             return arg
     return None
 
+def get_sigmas(args):
+    return args["model_options"]["transformer_options"]["sample_sigmas"].tolist()
+
+#-------------------------------------------------------------------------------#
+
+selfnorm = lambda x: x / x.norm()
+
+@torch.no_grad()
+def interpolated_scales(x_orig,cond,uncond,cond_scale,small_scale,squared=False,root_dist=False):
+    deltacfg_normal = x_orig - cond_scale  * cond - (cond_scale  - 1) * uncond
+    deltacfg_small  = x_orig - small_scale * cond - (small_scale - 1) * uncond
+    absdiff = (deltacfg_normal - deltacfg_small).abs()
+    absdiff = (absdiff-absdiff.min()) / (absdiff.max()-absdiff.min())
+    if squared:
+        absdiff = absdiff ** 2
+    elif root_dist:
+        absdiff = absdiff ** 0.5
+    new_scale  = (small_scale - 1) / (cond_scale - 1)
+    smaller_uncond = cond * (1 - new_scale) + uncond * new_scale
+    new_uncond = smaller_uncond * (1 - absdiff) + uncond * absdiff
+    return new_uncond
+
+@torch.no_grad()
+def normalize_adjust(a,b,strength=1):
+    norm_a = torch.linalg.norm(a)
+    a = selfnorm(a)
+    b = selfnorm(b)
+    res = b - a * (a * b).sum()
+    if res.isnan().any():
+        res = torch.nan_to_num(res, nan=0.0)
+    a = a - res * strength
+    return a * norm_a
+
+@torch.no_grad()
+def get_skimming_mask(x_orig, cond, uncond, cond_scale, return_denoised=False, disable_flipping_filter=False):
+    denoised = x_orig - ((x_orig - uncond) + cond_scale * ((x_orig - cond) - (x_orig - uncond)))
+    matching_pred_signs = (cond - uncond).sign() == cond.sign()
+    matching_diff_after = cond.sign() == (cond * cond_scale - uncond * (cond_scale - 1)).sign()
+
+    if disable_flipping_filter:
+        outer_influence = matching_pred_signs & matching_diff_after
+    else:
+        deviation_influence = (denoised.sign() == (denoised - x_orig).sign())
+        outer_influence = matching_pred_signs & matching_diff_after & deviation_influence
+
+    if return_denoised:
+        return outer_influence, denoised
+    else:
+        return outer_influence
+
 #-------------------------------------------------------------------------------#
 
 def approx_index(reference: list[float], value: float):
@@ -23,6 +74,26 @@ def approx_index(reference: list[float], value: float):
     for i in range(len(reference)):
         if value > reference[i]:
             return i - 1 + (value - reference[i-1]) / (reference[i] - reference[i-1])
+
+def find_percent(sigmas: list[float], percent: float):
+    if percent == 0:
+        return sigmas[0]
+    if percent == 1:
+        return sigmas[-1]
+    if percent < 0.0 or percent > 1.0:
+        raise ValueError("Value must be between 0.0 and 1.0 inclusive.")
+    max = len(sigmas) - 1
+    if max < 0:
+        raise ValueError("Reference list must contain at least one element.")
+    approx = max * percent
+    lower_index = int(approx)
+    upper_index = lower_index + 1
+    if upper_index > max:
+        return sigmas[max]
+    lower_value = sigmas[lower_index]
+    delta = sigmas[upper_index] - lower_value
+    fraction = approx - lower_index
+    return lower_value + delta * fraction
 
 def calculate_sigma_range(reference: list[float], start: float, end: float, steps: int):
     start_percentage = approx_index(reference, start) / (len(reference) - 1)
