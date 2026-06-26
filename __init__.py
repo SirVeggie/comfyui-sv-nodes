@@ -4604,34 +4604,6 @@ class CompressConds(io.ComfyNode):
         return (u[0,:75,:75]@s[0,:75].diag()@v[0,:,:75].T)[None]
 
 
-#-------------------------------------------------------------------------------#
-
-class GetImageSize(io.ComfyNode):
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id='SV-GetImageSize',
-            display_name='Image Size',
-            category='SV Nodes/Logic',
-            inputs=[
-            io.Image.Input('image'),
-            ],
-            outputs=[
-            io.Int.Output(display_name='width'),
-            io.Int.Output(display_name='height'),
-            ]
-        )
-
-    
-    @classmethod
-    def execute(cls, image) -> io.NodeOutput:
-        samples = image.movedim(-1,1)
-        size_w = samples.shape[3]
-        size_h = samples.shape[2]
-
-        return io.NodeOutput(size_w, size_h,)
-
-
 NODE_LIST = [
     SimpleText,
     WildcardProcessing,
@@ -4764,7 +4736,6 @@ NODE_LIST = [
     SV_CondDiffSharpening,
     SV_CFGVariableScale,
     CompressConds,
-    GetImageSize,
 ]
 
 

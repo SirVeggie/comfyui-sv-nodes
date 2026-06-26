@@ -9,10 +9,9 @@ def node_ids_from_v1(text: str) -> set[str]:
     return active
 
 backup = (ROOT / "__init__v1_backup.py").read_text(encoding="utf-8")
-borrowed = (ROOT / "borrowed.py").read_text(encoding="utf-8")
 migrated = (ROOT / "__init__.py").read_text(encoding="utf-8")
 
-v1_all = node_ids_from_v1(backup) | node_ids_from_v1(borrowed)
+v1_all = node_ids_from_v1(backup)
 v3 = set(re.findall(r"node_id='([^']+)'", migrated))
 
 print("origin v1 nodes:", len(v1_all))
