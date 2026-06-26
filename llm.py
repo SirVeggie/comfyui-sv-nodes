@@ -101,8 +101,7 @@ def build_llm_args(
         samplers.append("adaptive_p")
         payload["samplers"] = samplers
 
-    if thinking:
-        payload["chat_template_kwargs"] = {"enable_thinking": True}
+    payload["chat_template_kwargs"] = {"enable_thinking": thinking}
 
     return json.dumps(payload)
 
@@ -144,16 +143,58 @@ def _build_user_content(prompt: str, image_1: torch.Tensor | None, image_2: torc
     return parts
 
 
-def _merge_request_body(model: str, prompt: str, image_1, image_2, seed, llm_args: str | None) -> dict:
+def _merge_request_body(
+    model: str,
+    prompt: str,
+    image_1,
+    image_2,
+    seed,
+    llm_args: str | None,
+    system_instruction: str | None = None,
+) -> dict:
+    messages: list[dict] = []
+    if isinstance(system_instruction, str) and system_instruction.strip():
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": _build_user_content(prompt, image_1, image_2)})
     body: dict = {
         "model": model,
-        "messages": [{"role": "user", "content": _build_user_content(prompt, image_1, image_2)}],
-        "stream": True,
+        "messages": messages,
+        "stream": False,
     }
     if seed is not None:
         body["seed"] = int(seed)
     body.update(parse_llm_args(llm_args))
+    body["stream"] = False
+    body.pop("stream_options", None)
     return body
+
+
+def _extract_message_content(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
+                parts.append(part["text"])
+        return "".join(parts)
+    return "" if content is None else str(content)
+
+
+def _apply_usage(usage: dict, prompt_tokens: int, completion_tokens: int) -> tuple[int, int]:
+    if "prompt_tokens" in usage and usage["prompt_tokens"] is not None:
+        prompt_tokens = int(usage["prompt_tokens"])
+    if "completion_tokens" in usage and usage["completion_tokens"] is not None:
+        completion_tokens = int(usage["completion_tokens"])
+    return prompt_tokens, completion_tokens
+
+
+def _estimate_tokens(content: str, prompt: str, prompt_tokens: int, completion_tokens: int) -> tuple[int, int]:
+    if completion_tokens == 0 and content:
+        completion_tokens = max(1, len(content) // 4)
+    if prompt_tokens == 0 and prompt:
+        prompt_tokens = max(1, len(prompt) // 4)
+    return prompt_tokens, completion_tokens
 
 
 def _format_stats(model: str, duration: float, prompt_tokens: int, completion_tokens: int) -> str:
@@ -167,8 +208,14 @@ def _format_stats(model: str, duration: float, prompt_tokens: int, completion_to
     )
 
 
-def _stream_chat_completion(url: str, api_key: str, body: dict) -> tuple[str, str, int, int, float]:
-    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+def _chat_completion(
+    url: str,
+    api_key: str,
+    body: dict,
+    prompt: str,
+    system_instruction: str | None = None,
+) -> tuple[str, str, int, int, float]:
+    headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -182,40 +229,37 @@ def _stream_chat_completion(url: str, api_key: str, body: dict) -> tuple[str, st
     model_used = body.get("model", "")
     prompt_tokens = 0
     completion_tokens = 0
-    content_parts: list[str] = []
     start = time.perf_counter()
 
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:
-            for raw_line in resp:
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if payload == "[DONE]":
-                    break
-                chunk = json.loads(payload)
-                if chunk.get("model"):
-                    model_used = chunk["model"]
-                usage = chunk.get("usage") or {}
-                if usage:
-                    prompt_tokens = int(usage.get("prompt_tokens", prompt_tokens) or prompt_tokens)
-                    completion_tokens = int(usage.get("completion_tokens", completion_tokens) or completion_tokens)
-                choices = chunk.get("choices") or []
-                if choices:
-                    choice = choices[0]
-                    delta = choice.get("delta") or {}
-                    if delta.get("content"):
-                        content_parts.append(delta["content"])
-                    message = choice.get("message") or {}
-                    if message.get("content"):
-                        content_parts.append(message["content"])
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"LLM request failed ({e.code}): {detail}") from e
 
     duration = time.perf_counter() - start
-    return "".join(content_parts), model_used, prompt_tokens, completion_tokens, duration
+
+    if payload.get("model"):
+        model_used = payload["model"]
+    if payload.get("usage"):
+        prompt_tokens, completion_tokens = _apply_usage(
+            payload["usage"], prompt_tokens, completion_tokens,
+        )
+
+    choices = payload.get("choices") or []
+    content = ""
+    if choices:
+        message = choices[0].get("message") or {}
+        content = _extract_message_content(message.get("content"))
+
+    prompt_for_estimate = prompt
+    if isinstance(system_instruction, str) and system_instruction.strip():
+        prompt_for_estimate = f"{system_instruction}\n{prompt}"
+    prompt_tokens, completion_tokens = _estimate_tokens(
+        content, prompt_for_estimate, prompt_tokens, completion_tokens,
+    )
+    return content, model_used, prompt_tokens, completion_tokens, duration
 
 
 class LLMArgs(io.ComfyNode):
@@ -226,16 +270,16 @@ class LLMArgs(io.ComfyNode):
             display_name="LLM Args",
             category="SV Nodes/LLM",
             inputs=[
-                io.Float.Input("temperature", default=0.0, min=0.0, max=2.0, step=0.01),
-                io.Float.Input("top_p", default=0.0, min=0.0, max=1.0, step=0.01),
-                io.Int.Input("top_k", default=0, min=0, max=1000, step=1),
-                io.Float.Input("min_p", default=0.0, min=0.0, max=1.0, step=0.01),
-                io.Float.Input("adaptive_p_target", default=0.0, min=0.0, max=1.0, step=0.01),
-                io.Float.Input("adaptive_p_decay", default=0.0, min=0.0, max=1.0, step=0.01),
-                io.Boolean.Input("thinking", default=False),
+                io.Float.Input("temperature", display_name="temperature", default=0.0, min=0.0, max=2.0, step=0.01),
+                io.Float.Input("top_p", display_name="top p", default=0.0, min=0.0, max=1.0, step=0.01),
+                io.Int.Input("top_k", display_name="top k", default=0, min=0, max=1000, step=1),
+                io.Float.Input("min_p", display_name="min p", default=0.0, min=0.0, max=1.0, step=0.01),
+                io.Float.Input("adaptive_p_target", display_name="adaptive p target", default=0.0, min=0.0, max=1.0, step=0.01),
+                io.Float.Input("adaptive_p_decay", display_name="adaptive p decay", default=0.0, min=0.0, max=1.0, step=0.01),
+                io.Boolean.Input("thinking", display_name="thinking", default=False),
             ],
             outputs=[
-                io.String.Output(display_name="llm_args"),
+                io.String.Output(display_name="llm args"),
             ],
         )
 
@@ -269,26 +313,28 @@ class LLMRequest(io.ComfyNode):
             display_name="LLM Request",
             category="SV Nodes/LLM",
             inputs=[
-                io.Combo.Input("provider", options=provider_names()),
-                io.String.Input("model", default="", multiline=False),
-                io.String.Input("prompt", multiline=True),
-                io.Image.Input("image_1", optional=True),
-                io.Image.Input("image_2", optional=True),
-                io.Int.Input("seed", optional=True),
-                io.String.Input("llm_args", multiline=True, optional=True),
+                io.String.Input("system_instruction", display_name="system instruction", optional=True, force_input=True),
+                io.Combo.Input("provider", display_name="provider", options=provider_names()),
+                io.String.Input("model", display_name="model", default="", multiline=False),
+                io.String.Input("prompt", display_name="prompt", multiline=True),
+                io.Image.Input("image_1", display_name="image 1", optional=True),
+                io.Image.Input("image_2", display_name="image 2", optional=True),
+                io.Int.Input("seed", display_name="seed", optional=True, force_input=True),
+                io.String.Input("llm_args", display_name="llm args", optional=True, force_input=True),
             ],
             outputs=[
                 io.String.Output(display_name="result"),
-                io.String.Output(display_name="generation_stats"),
+                io.String.Output(display_name="generation stats"),
             ],
         )
 
     @classmethod
-    def fingerprint_inputs(cls, provider, model, prompt, image_1=None, image_2=None, seed=None, llm_args=None) -> str:
+    def fingerprint_inputs(cls, provider, model, prompt, system_instruction=None, image_1=None, image_2=None, seed=None, llm_args=None) -> str:
         return json.dumps({
             "provider": provider,
             "model": model,
             "prompt": prompt,
+            "system_instruction": system_instruction,
             "seed": seed,
             "llm_args": llm_args,
             "image_1": image_1.shape if isinstance(image_1, torch.Tensor) else None,
@@ -301,6 +347,7 @@ class LLMRequest(io.ComfyNode):
         provider,
         model,
         prompt,
+        system_instruction=None,
         image_1=None,
         image_2=None,
         seed=None,
@@ -314,12 +361,14 @@ class LLMRequest(io.ComfyNode):
             raise ValueError("Model is required")
 
         profile = get_provider(provider)
-        body = _merge_request_body(model.strip(), prompt, image_1, image_2, seed, llm_args)
+        body = _merge_request_body(model.strip(), prompt, image_1, image_2, seed, llm_args, system_instruction)
         url = f"{profile['base_url']}/chat/completions"
-        result, model_used, prompt_tokens, completion_tokens, duration = _stream_chat_completion(
+        result, model_used, prompt_tokens, completion_tokens, duration = _chat_completion(
             url,
             profile["api_key"],
             body,
+            prompt,
+            system_instruction,
         )
         stats = _format_stats(model_used, duration, prompt_tokens, completion_tokens)
         return io.NodeOutput(result, stats)
